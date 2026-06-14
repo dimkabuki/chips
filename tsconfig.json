@@ -1,0 +1,14 @@
+{
+  "compilerOptions": {
+    "exactOptionalPropertyTypes": true,
+    "noFallthroughCasesInSwitch": true,
+    "noImplicitOverride": true,
+    "noUncheckedIndexedAccess": true,
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "target": "ES2022",
+    "useDefineForClassFields": true
+  },
+  "include": ["src", "tests", "eslint.config.js", "vitest.config.ts"]
+}
