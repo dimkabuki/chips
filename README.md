@@ -6,8 +6,10 @@ application tracks stacks, bets, pots, turn order, streets, and settlement.
 
 The product and technical design is documented in
 [`docs/design.md`](docs/design.md).
+Accepted implementation decisions are recorded in
+[`docs/adr`](docs/adr).
 
 ## Status
 
-The repository is currently in the design phase. Implementation should begin
-with the framework-independent domain engine and its tests.
+Increment 1 implementation has started with the framework-independent domain
+engine and its tests.
