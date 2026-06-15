@@ -159,6 +159,11 @@ describe("betting commands", () => {
       playerId: "player-4",
       actions: [
         { type: "fold" },
+        {
+          type: "allIn",
+          targetStreetCommitment: 1_000,
+          chipsAdded: 1_000,
+        },
         { type: "call", targetStreetCommitment: 10, chipsAdded: 10 },
         { type: "raise", minTarget: 20, maxTarget: 999 },
       ],
