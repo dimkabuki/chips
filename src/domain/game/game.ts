@@ -30,15 +30,26 @@ export interface HandParticipant {
   readonly folded: boolean;
   readonly allIn: boolean;
   readonly actedSinceFullRaise: boolean;
+  readonly raiseReopened: boolean;
 }
 
 export interface HandAction {
   readonly sequence: number;
   readonly playerId: string;
-  readonly type: "fold" | "check" | "call" | "bet" | "raise";
+  readonly type: "fold" | "check" | "call" | "bet" | "raise" | "allIn";
   readonly targetStreetCommitment: number;
   readonly chipsAdded: number;
   readonly resultingStack: number;
+}
+
+export interface Pot {
+  readonly amount: number;
+  readonly eligiblePlayerIds: readonly string[];
+}
+
+export interface PotAward {
+  readonly potIndex: number;
+  readonly allocations: Readonly<Record<string, number>>;
 }
 
 export interface Hand {
@@ -57,6 +68,8 @@ export interface Hand {
   readonly pendingTransition?: Exclude<Street, "preflop">;
   readonly winnerPlayerId?: string;
   readonly potAmount?: number;
+  readonly pots?: readonly Pot[];
+  readonly awards?: readonly PotAward[];
 }
 
 export interface Game {
