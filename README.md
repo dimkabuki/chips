@@ -11,5 +11,6 @@ Accepted implementation decisions are recorded in
 
 ## Status
 
-Increment 1 implementation has started with the framework-independent domain
-engine and its tests.
+Increment 2 provides the framework-independent single-pot hand engine:
+positions, blinds, turn order, normal betting actions, street transitions, and
+uncontested settlement.

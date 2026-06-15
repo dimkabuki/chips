@@ -15,6 +15,11 @@ export const validateGameInvariants = (
   const playerIds = new Set(game.players.map(({ id }) => id));
   const seats = new Set(game.players.map(({ seat }) => seat));
   const stackTotal = game.players.reduce((total, player) => total + player.stack, 0);
+  const commitmentTotal =
+    game.currentHand?.participants.reduce(
+      (total, participant) => total + participant.handCommitment,
+      0,
+    ) ?? 0;
 
   if (playerIds.size !== game.players.length) {
     violations.push({
@@ -28,13 +33,32 @@ export const validateGameInvariants = (
       message: "Player seats must be unique.",
     });
   }
-  if (game.players.some(({ stack }) => !isPositiveInteger(stack))) {
+  if (
+    game.players.some((player) => {
+      const zeroStackIsAllIn =
+        player.stack === 0 &&
+        game.currentHand?.participants.some(
+          (participant) =>
+            participant.playerId === player.id && participant.allIn,
+        );
+      return (
+        !Number.isInteger(player.stack) ||
+        player.stack < 0 ||
+        (player.status === "active" &&
+          player.stack === 0 &&
+          !zeroStackIsAllIn)
+      );
+    })
+  ) {
     violations.push({
       code: "invariant.players.stack",
       message: "Active player stacks must be positive integers.",
     });
   }
-  if (!isPositiveInteger(game.chipSupply) || stackTotal !== game.chipSupply) {
+  if (
+    !isPositiveInteger(game.chipSupply) ||
+    stackTotal + commitmentTotal !== game.chipSupply
+  ) {
     violations.push({
       code: "invariant.chips.conserved",
       message: "Player stacks must equal the configured chip supply.",
