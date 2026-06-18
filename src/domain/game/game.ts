@@ -47,6 +47,14 @@ export interface Pot {
   readonly eligiblePlayerIds: readonly string[];
 }
 
+export interface AuditEntry {
+  readonly sequence: number;
+  readonly type: "undo" | "stackCorrection";
+  readonly reason?: string;
+  readonly before?: unknown;
+  readonly after?: unknown;
+}
+
 export interface PotAward {
   readonly potIndex: number;
   readonly allocations: Readonly<Record<string, number>>;
@@ -86,5 +94,5 @@ export interface Game {
   readonly handNumber: number;
   readonly currentHand?: Hand;
   readonly completedHands: readonly never[];
-  readonly auditLog: readonly never[];
+  readonly auditLog: readonly AuditEntry[];
 }
