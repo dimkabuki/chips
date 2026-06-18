@@ -18,7 +18,7 @@ export class GameSession {
     return result;
   }
   async reset(): Promise<void> { await this.repository.delete(); this.game = undefined; this.revision = undefined; this.undoSnapshots = []; }
-  async replace(game: Game): Promise<SessionResult> { this.game = game; this.revision = undefined; this.undoSnapshots = []; return this.persist(); }
+  async replace(game: Game): Promise<SessionResult> { this.game = game; this.undoSnapshots = []; return this.persist(); }
   async startHand(input: StartHandInput): Promise<SessionResult> { return this.accept((game) => startHand(game, input), false, true); }
   async act(input: PlayerActionInput): Promise<SessionResult> { return this.accept((game) => act(game, input), true, false); }
   async confirmStreet(): Promise<SessionResult> { return this.accept(confirmStreet, true, false); }
