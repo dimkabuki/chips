@@ -2,7 +2,7 @@ import type { GameSession } from "../application/game-session.js";
 import type { LoadGameResult } from "../application/persistence.js";
 import type { Game, Hand, HandParticipant } from "../domain/game/game.js";
 import { AVATARS, createGame, type ValidationIssue } from "../domain/game/create-game.js";
-import { getLegalActions, type LegalAction, type PlayerActionType } from "../domain/game/hand-engine.js";
+import { derivePots, getLegalActions, type LegalAction, type PlayerActionType, type ShowdownSelection } from "../domain/game/hand-engine.js";
 import { defaultSetupForm, previewSetup, toCreateGameInput, type SetupForm } from "./setup.js";
 
 export interface RenderAppOptions { readonly session: GameSession; }
@@ -69,21 +69,54 @@ const bettingControls = (game: Game): string => {
   return `<section aria-label='betting-actions'><h3>Actions for ${escapeHtml(playerName(game, legal.playerId))}</h3>${buttons}</section>`;
 };
 
+
+const settlementControls = (game: Game, hand: Hand): string => {
+  if (hand.status !== "showdown") return "";
+  const derived = derivePots(game);
+  const returned = Object.entries(derived.returned).length === 0
+    ? ""
+    : `<p>Returned uncalled chips: ${Object.entries(derived.returned).map(([id, amount]) => `${escapeHtml(playerName(game, id))} ${String(amount)}`).join(", ")}</p>`;
+  const pots = derived.pots.map((pot, index) => {
+    const eligible = pot.eligiblePlayerIds.map((id) => `<label><input type='checkbox' name='pot-${String(index)}-winner' value='${escapeHtml(id)}'> ${escapeHtml(playerName(game, id))}</label><label>Manual allocation for ${escapeHtml(playerName(game, id))} <input name='pot-${String(index)}-allocation-${escapeHtml(id)}' inputmode='numeric'></label>`).join("");
+    return `<fieldset data-pot-index='${String(index)}'><legend>Pot ${String(index + 1)} - ${String(pot.amount)} chips</legend><p>Eligible winners: ${pot.eligiblePlayerIds.map((id) => escapeHtml(playerName(game, id))).join(", ")}</p>${eligible}</fieldset>`;
+  }).join("");
+  return `<section aria-label='showdown-settlement'><h3>Showdown settlement</h3>${returned}${pots}<button type='button' data-action='settle-showdown'>Settle showdown</button></section>`;
+};
+
+const settledResult = (game: Game, hand: Hand): string => {
+  if (hand.status !== "settled") return "";
+  if (hand.winnerPlayerId !== undefined) {
+    return `<section aria-label='hand-result'><h3>Hand result</h3><p>Uncontested winner: ${escapeHtml(playerName(game, hand.winnerPlayerId))}</p><p>Pot amount: ${String(hand.potAmount ?? 0)}</p></section>`;
+  }
+  const pots = (hand.pots ?? []).map((pot, index) => {
+    const award = hand.awards?.find(({ potIndex }) => potIndex === index);
+    const allocations = Object.entries(award?.allocations ?? {}).map(([id, amount]) => `${escapeHtml(playerName(game, id))} ${String(amount)}`).join(", ");
+    return `<li>Pot ${String(index + 1)} - ${String(pot.amount)} chips - awards ${allocations}</li>`;
+  }).join("");
+  return `<section aria-label='hand-result'><h3>Showdown result</h3><ul>${pots}</ul></section>`;
+};
+
+const completedGameResult = (game: Game): string => {
+  if (game.status !== "completed") return "";
+  const winners = game.players.filter(({ stack }) => stack > 0);
+  return `<section aria-label='completed-game'><h2>Game completed</h2><p>Final winner: ${winners.length === 1 ? escapeHtml(winners[0]?.name ?? "unknown") : "undetermined"}</p></section>`;
+};
+
 const handSummary = (game: Game): string => {
   const hand = game.currentHand;
   if (hand === undefined) return "<p>Current hand: none</p>";
   const transition = hand.status === "dealPrompt" && hand.pendingTransition !== undefined
     ? `<section aria-label='street-transition'><p>Ready to deal ${hand.pendingTransition}</p><button type='button' data-action='confirm-street'>Deal the ${hand.pendingTransition}</button></section>`
     : "";
-  return `<section aria-label='current-hand'><h3>Hand #${String(hand.number)}</h3><p>Button: ${escapeHtml(playerName(game, hand.buttonPlayerId))}</p><p>Small blind: ${escapeHtml(playerName(game, hand.smallBlindPlayerId))}</p><p>Big blind: ${escapeHtml(playerName(game, hand.bigBlindPlayerId))}</p><p>Street: ${hand.street}</p><p>Hand status: ${hand.status}</p><p>Current actor: ${escapeHtml(hand.status === "betting" ? playerName(game, hand.actorPlayerId) : "none")}</p><p>Current bet: ${String(hand.currentBet)}</p><p>Last full raise size: ${String(hand.lastFullRaiseSize)}</p><ul aria-label='participants'>${hand.participants.map((participant) => participantRow(game, participant)).join("")}</ul>${actionLog(game, hand)}${transition}${bettingControls(game)}</section>`;
+  return `<section aria-label='current-hand'><h3>Hand #${String(hand.number)}</h3><p>Button: ${escapeHtml(playerName(game, hand.buttonPlayerId))}</p><p>Small blind: ${escapeHtml(playerName(game, hand.smallBlindPlayerId))}</p><p>Big blind: ${escapeHtml(playerName(game, hand.bigBlindPlayerId))}</p><p>Street: ${hand.street}</p><p>Hand status: ${hand.status}</p><p>Current actor: ${escapeHtml(hand.status === "betting" ? playerName(game, hand.actorPlayerId) : "none")}</p><p>Current bet: ${String(hand.currentBet)}</p><p>Last full raise size: ${String(hand.lastFullRaiseSize)}</p><ul aria-label='participants'>${hand.participants.map((participant) => participantRow(game, participant)).join("")}</ul>${actionLog(game, hand)}${transition}${settlementControls(game, hand)}${settledResult(game, hand)}${bettingControls(game)}</section>`;
 };
 
 const gameSummary = (game: Game, recovered: boolean, commandErrors: readonly string[]): string => {
   const dealer = game.players.find((p) => p.id === game.dealerPlayerId)?.name ?? game.dealerPlayerId;
   const players = game.players.map((p) => `<li>${String(p.seat + 1)}. ${escapeHtml(p.name)} (${p.avatar}) - stack ${String(p.stack)} - ${p.status}</li>`).join("");
-  const canStart = game.status === "active" && game.currentHand === undefined;
+  const canStart = game.status === "active" && (game.currentHand === undefined || game.currentHand.status === "settled");
   const start = canStart ? "<button type='button' data-action='start-hand'>Start hand</button>" : "";
-  return `${recovered ? "<p role='status'>Recovered saved game.</p>" : ""}<section aria-label='active-game'><h2>Active game</h2><div role='alert'>${commandErrors.map((error) => `<p>${escapeHtml(error)}</p>`).join("")}</div><p>Status: ${game.status}</p><p>Dealer: ${escapeHtml(dealer)}</p><p>Blinds: ${String(game.settings.smallBlind)}/${String(game.settings.bigBlind)}</p>${handSummary(game)}<ul>${players}</ul>${start}<button type='button' data-action='new-game'>New game</button></section>`;
+  return `${recovered ? "<p role='status'>Recovered saved game.</p>" : ""}<section aria-label='active-game'><h2>Active game</h2><div role='alert'>${commandErrors.map((error) => `<p>${escapeHtml(error)}</p>`).join("")}</div><p>Status: ${game.status}</p><p>Dealer: ${escapeHtml(dealer)}</p><p>Blinds: ${String(game.settings.smallBlind)}/${String(game.settings.bigBlind)}</p>${completedGameResult(game)}${handSummary(game)}<ul>${players}</ul>${start}<button type='button' data-action='new-game'>New game</button></section>`;
 };
 
 const formFromDom = (root: HTMLElement, current: SetupForm): SetupForm => ({
@@ -189,6 +222,24 @@ export const renderApp = async (root: HTMLElement, { session }: RenderAppOptions
       const rawTarget = targetName === undefined ? undefined : root.querySelector<HTMLInputElement>(`[name='${targetName}']`)?.value;
       const targetStreetCommitment = rawTarget === undefined ? undefined : Number(rawTarget);
       const result = await session.act({ playerId, type: action as PlayerActionType, ...(targetStreetCommitment === undefined ? {} : { targetStreetCommitment }) });
+      state.commandErrors = result.ok ? [] : [saveErrorMessage(result)];
+      draw(); return;
+    }
+
+    if (action === "settle-showdown") {
+      const game = session.current();
+      const hand = game?.currentHand;
+      if (game === undefined || hand?.status !== "showdown") return;
+      const selections: ShowdownSelection[] = derivePots(game).pots.map((_pot, potIndex) => {
+        const checked = Array.from(root.querySelectorAll<HTMLInputElement>(`[name='pot-${String(potIndex)}-winner']:checked`));
+        const winnerPlayerIds = checked.map(({ value }) => value);
+        const allocationEntries = winnerPlayerIds.flatMap((id) => {
+          const raw = Array.from(root.querySelectorAll<HTMLInputElement>(`[name^='pot-${String(potIndex)}-allocation-']`)).find((input) => input.name === `pot-${String(potIndex)}-allocation-${id}`)?.value.trim() ?? "";
+          return raw === "" ? [] : [[id, Number(raw)] as const];
+        });
+        return { potIndex, winnerPlayerIds, ...(allocationEntries.length === 0 ? {} : { allocations: Object.fromEntries(allocationEntries) }) };
+      });
+      const result = await session.settleShowdown(selections);
       state.commandErrors = result.ok ? [] : [saveErrorMessage(result)];
       draw(); return;
     }
