@@ -20,9 +20,10 @@ Implemented through the operator hand and betting shell:
 - application session and one-active-game repository boundary for persistence,
   recovery, revision conflicts, reset, undo orchestration, showdown settlement,
   and stack correction;
-- browser shell for setup, local recovery, corrupt-record reset, active-game
-  summary, hand start, current-hand verification, legal betting controls, and
-  explicit street-transition confirmation.
+- React browser shell for setup, local recovery, corrupt-record reset, active-game
+  summary, hand start, current-hand verification, legal betting controls,
+  explicit street-transition confirmation, showdown settlement, settled-hand
+  results, and completed-game results.
 
 The UI intentionally still delegates poker legality and persistence semantics to
 the domain/application seams. Browser storage remains isolated to the IndexedDB
@@ -32,14 +33,7 @@ adapter.
 
 ### 1. Complete the operator hand lifecycle UI
 
-- Add showdown settlement controls that derive/display each pot, list only
-  eligible winners, support split winners and manual allocation overrides, call
-  `GameSession.settleShowdown`, and preserve UI state on rejected commands.
-- Add settled-hand and completed-game result views, including the final winner
-  state when one player owns the chip supply.
-- Extend component tests to cover normal showdown, side-pot settlement,
-  invalid settlement rejection, game completion, and reload at showdown and
-  settled boundaries.
+- Preserve settlement form state on rejected settlement commands.
 
 ### 2. Add operator recovery tools
 
