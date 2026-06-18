@@ -38,6 +38,53 @@ const fixtureGame = () => {
   return result.value;
 };
 
+
+const showdownGame = () => {
+  const game = fixtureGame();
+  const started = startHand(game, { handId: "hand-showdown" });
+  if (!started.ok) throw new Error("bad fixture");
+  const hand = started.value.currentHand;
+  if (hand === undefined) throw new Error("missing hand");
+  return {
+    ...started.value,
+    currentHand: { ...hand, status: "showdown" as const, street: "river" as const },
+  };
+};
+
+const sidePotShowdownGame = () => ({
+  id: "game-side-pot",
+  schemaVersion: 1 as const,
+  status: "active" as const,
+  settings: { smallBlind: 5, bigBlind: 10 },
+  chipSupply: 300,
+  players: [
+    { id: "player-1", seat: 0, name: "Ada", avatar: "red" as const, stack: 50, status: "active" as const },
+    { id: "player-2", seat: 1, name: "Linus", avatar: "blue" as const, stack: 0, status: "active" as const },
+    { id: "player-3", seat: 2, name: "Grace", avatar: "green" as const, stack: 0, status: "active" as const },
+  ],
+  dealerPlayerId: "player-1",
+  handNumber: 1,
+  currentHand: {
+    id: "hand-side-pot",
+    number: 1,
+    status: "showdown" as const,
+    street: "river" as const,
+    buttonPlayerId: "player-1",
+    smallBlindPlayerId: "player-2",
+    bigBlindPlayerId: "player-3",
+    currentBet: 0,
+    lastFullRaiseSize: 10,
+    participants: [
+      { playerId: "player-1", stackAtStart: 100, streetCommitment: 0, handCommitment: 50, folded: false, allIn: true, actedSinceFullRaise: true, raiseReopened: false },
+      { playerId: "player-2", stackAtStart: 100, streetCommitment: 0, handCommitment: 100, folded: false, allIn: true, actedSinceFullRaise: true, raiseReopened: false },
+      { playerId: "player-3", stackAtStart: 100, streetCommitment: 0, handCommitment: 100, folded: false, allIn: true, actedSinceFullRaise: true, raiseReopened: false },
+    ],
+    actions: [],
+  },
+  completedHands: [],
+  auditLog: [],
+});
+
 const setup = async (repo = new MemoryGameRepository()) => {
   document.body.innerHTML = "<div id='app'></div>";
   const session = new GameSession(repo);
@@ -121,7 +168,9 @@ describe("operator UI shell", () => {
   it("renders betting controls from domain legal actions and previews target plus incremental cost", async () => {
     const { session } = await setup(new MemoryGameRepository(serializeEnvelope(createEnvelope(fixtureGame(), 1))));
     await click("Start hand");
-    const legal = getLegalActions(required(session.current()));
+    const game = session.current();
+    if (game === undefined) throw new Error("missing game");
+    const legal = getLegalActions(game);
     expect(legal?.actions.map((action) => action.type)).toEqual(["fold", "allIn", "call", "raise"]);
     expect(document.querySelector("[data-action='bet']")).toBeNull();
     expect(document.querySelector("[data-action='check']")).toBeNull();
@@ -199,4 +248,94 @@ describe("operator UI shell", () => {
     expect(text()).toContain("Current actor: none");
     expect(document.querySelector("[aria-label='betting-actions']")).toBeNull();
   });
+  it("renders showdown derived pots and eligible players only", async () => {
+    await setup(new MemoryGameRepository(serializeEnvelope(createEnvelope(sidePotShowdownGame(), 1))));
+    expect(text()).toContain("Pot 1 - 150 chips");
+    expect(text()).toContain("Pot 2 - 100 chips");
+    const pot2 = required(document.querySelector<HTMLElement>("[data-pot-index='1']"));
+    expect(pot2.textContent).not.toContain("Ada");
+    expect(pot2.textContent).toContain("Linus");
+    expect(pot2.textContent).toContain("Grace");
+  });
+
+  it("settles a single showdown pot through the session seam and renders result state", async () => {
+    const repo = new MemoryGameRepository(serializeEnvelope(createEnvelope(showdownGame(), 1)));
+    const { session } = await setup(repo);
+    required(document.querySelector<HTMLInputElement>("[name='pot-0-winner'][value='player-1']")).checked = true;
+    await clickAction("settle-showdown");
+    expect(session.current()?.currentHand?.status).toBe("settled");
+    expect(repo.rawValue()).toContain('"awards"');
+    expect(text()).toContain("Showdown result");
+    expect(text()).toContain("Pot 1 - 10 chips - awards Ada 10");
+    expect(text()).toContain("Start hand");
+  });
+
+  it("settles side and split pots, persists, and renders awards", async () => {
+    const repo = new MemoryGameRepository(serializeEnvelope(createEnvelope(sidePotShowdownGame(), 1)));
+    await setup(repo);
+    required(document.querySelector<HTMLInputElement>("[name='pot-0-winner'][value='player-1']")).checked = true;
+    required(document.querySelector<HTMLInputElement>("[name='pot-0-winner'][value='player-2']")).checked = true;
+    required(document.querySelector<HTMLInputElement>("[name='pot-1-winner'][value='player-3']")).checked = true;
+    await clickAction("settle-showdown");
+    expect(repo.rawValue()).toContain('"potIndex":1');
+    expect(text()).toContain("Pot 1 - 150 chips - awards Ada 75, Linus 75");
+    expect(text()).toContain("Pot 2 - 100 chips - awards Grace 100");
+  });
+
+  it("surfaces invalid showdown rejection without replacing current UI state", async () => {
+    const { session } = await setup(new MemoryGameRepository(serializeEnvelope(createEnvelope(showdownGame(), 1))));
+    const before = session.current();
+    await clickAction("settle-showdown");
+    expect(text()).toContain("Each pot requires a winner.");
+    expect(session.current()).toBe(before);
+    expect(text()).toContain("Showdown settlement");
+  });
+
+  it("reloads at showdown with the same settlement prompt", async () => {
+    const repo = new MemoryGameRepository(serializeEnvelope(createEnvelope(sidePotShowdownGame(), 1)));
+    await setup(repo);
+    await setup(repo);
+    expect(text()).toContain("Recovered saved game.");
+    expect(text()).toContain("Showdown settlement");
+    expect(text()).toContain("Pot 2 - 100 chips");
+  });
+
+  it("reloads after settlement with the same result summary", async () => {
+    const repo = new MemoryGameRepository(serializeEnvelope(createEnvelope(showdownGame(), 1)));
+    await setup(repo);
+    required(document.querySelector<HTMLInputElement>("[name='pot-0-winner'][value='player-2']")).checked = true;
+    await clickAction("settle-showdown");
+    await setup(repo);
+    expect(text()).toContain("Recovered saved game.");
+    expect(text()).toContain("Showdown result");
+    expect(text()).toContain("Pot 1 - 10 chips - awards Linus 10");
+  });
+
+  it("renders completed final winner and no start-hand or betting controls", async () => {
+    const base = sidePotShowdownGame();
+    const completed = { ...base, status: "completed" as const, players: [
+      { id: "player-1", seat: 0, name: "Ada", avatar: "red" as const, stack: 0, status: "busted" as const },
+      { id: "player-2", seat: 1, name: "Linus", avatar: "blue" as const, stack: 300, status: "active" as const },
+      { id: "player-3", seat: 2, name: "Grace", avatar: "green" as const, stack: 0, status: "busted" as const },
+    ], currentHand: { ...base.currentHand, status: "settled" as const, pots: [{ amount: 300, eligiblePlayerIds: ["player-2"] }], awards: [{ potIndex: 0, allocations: { "player-2": 300 } }], participants: base.currentHand.participants.map((p) => ({ ...p, streetCommitment: 0, handCommitment: 0 })) } };
+    await setup(new MemoryGameRepository(serializeEnvelope(createEnvelope(completed, 1))));
+    expect(text()).toContain("Game completed");
+    expect(text()).toContain("Final winner: Linus");
+    expect(text()).not.toContain("Start hand");
+    expect(document.querySelector("[aria-label='betting-actions']")).toBeNull();
+  });
+
+  it("keeps uncontested settlement result rendered without showdown controls", async () => {
+    const game = fixtureGame();
+    const started = startHand(game, { handId: "hand-fixed" });
+    if (!started.ok) throw new Error("bad fixture");
+    const folded = act(started.value, { playerId: "player-1", type: "fold" });
+    if (!folded.ok) throw new Error("bad fold");
+    await setup(new MemoryGameRepository(serializeEnvelope(createEnvelope(folded.value, 1))));
+    expect(text()).toContain("Uncontested winner: Linus");
+    expect(text()).toContain("Pot amount: 15");
+    expect(text()).not.toContain("Showdown settlement");
+  });
+
+
 });
