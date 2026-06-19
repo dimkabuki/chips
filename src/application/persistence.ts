@@ -1,7 +1,7 @@
 import type { Game } from "../domain/game/game.js";
 import { validateGameInvariants } from "../domain/game/invariants.js";
 
-export const CURRENT_PERSISTENCE_SCHEMA_VERSION = 1;
+export const CURRENT_PERSISTENCE_SCHEMA_VERSION = 2;
 
 export interface PersistedGameEnvelope {
   readonly schemaVersion: number;
@@ -9,11 +9,12 @@ export interface PersistedGameEnvelope {
   readonly savedAt: string;
   readonly checksum: string;
   readonly game: Game;
+  readonly undoSnapshots: readonly Game[];
 }
 
 export interface GameRepository {
   readonly load: () => Promise<LoadGameResult>;
-  readonly save: (game: Game, expectedRevision: number | undefined) => Promise<SaveGameResult>;
+  readonly save: (game: Game, expectedRevision: number | undefined, undoSnapshots?: readonly Game[]) => Promise<SaveGameResult>;
   readonly delete: () => Promise<void>;
 }
 
@@ -40,12 +41,13 @@ export const checksumGame = (game: Game): string => {
   return hash.toString(16).padStart(8, "0");
 };
 
-export const createEnvelope = (game: Game, revision: number, savedAt = new Date().toISOString()): PersistedGameEnvelope => ({
+export const createEnvelope = (game: Game, revision: number, savedAt = new Date().toISOString(), undoSnapshots: readonly Game[] = []): PersistedGameEnvelope => ({
   schemaVersion: CURRENT_PERSISTENCE_SCHEMA_VERSION,
   revision,
   savedAt,
   checksum: checksumGame(game),
   game,
+  undoSnapshots,
 });
 
 const isObject = (value: unknown): value is Record<string, unknown> => value !== null && typeof value === "object" && !Array.isArray(value);
@@ -64,8 +66,16 @@ export const parsePersistedEnvelope = (raw: string): LoadGameResult => {
   const migrated = migrateGameToCurrent(parsed.game);
   if (!migrated.ok) return { ok: false, code: "persistence.migration" };
   if (checksumGame(migrated.game) !== parsed.checksum) return { ok: false, code: "persistence.checksum" };
+  const rawSnapshots = Array.isArray(parsed.undoSnapshots) ? parsed.undoSnapshots : [];
+  const undoSnapshots: Game[] = [];
+  for (const snapshot of rawSnapshots.slice(0, 3)) {
+    const migratedSnapshot = migrateGameToCurrent(snapshot);
+    if (!migratedSnapshot.ok) return { ok: false, code: "persistence.migration" };
+    if (validateGameInvariants(migratedSnapshot.game).length > 0) return { ok: false, code: "persistence.invariant" };
+    undoSnapshots.push(migratedSnapshot.game);
+  }
   if (validateGameInvariants(migrated.game).length > 0) return { ok: false, code: "persistence.invariant" };
-  return { ok: true, envelope: { schemaVersion: CURRENT_PERSISTENCE_SCHEMA_VERSION, revision: parsed.revision, savedAt: parsed.savedAt, checksum: parsed.checksum, game: migrated.game } };
+  return { ok: true, envelope: { schemaVersion: CURRENT_PERSISTENCE_SCHEMA_VERSION, revision: parsed.revision, savedAt: parsed.savedAt, checksum: parsed.checksum, game: migrated.game, undoSnapshots } };
 };
 
 export const serializeEnvelope = (envelope: PersistedGameEnvelope): string => JSON.stringify(envelope);

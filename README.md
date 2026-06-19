@@ -1,70 +1,34 @@
 # Chips
 
-Chips is a local-first poker chip calculator and game tracker for physical
-no-limit Texas Hold'em games. One device acts as the table operator while the
-application tracks stacks, bets, pots, turn order, streets, and settlement.
+Chips is a local-first poker chip calculator and game tracker for physical no-limit Texas Hold'em games. One device acts as the table operator while the application tracks stacks, bets, pots, turn order, streets, settlement, undo, and audited stack correction.
 
-The product and technical design is documented in
-[`docs/design.md`](docs/design.md).
-Accepted implementation decisions are recorded in
-[`docs/adr`](docs/adr).
+The product and technical design is documented in [`docs/design.md`](docs/design.md). Accepted implementation decisions are recorded in [`docs/adr`](docs/adr).
 
 ## Status
 
-Implemented through the operator hand and betting shell:
+v1 development is complete for the single-device static application:
 
-- framework-independent domain engine for setup, blinds, turn order, betting,
-  street transitions, all-ins, side pots, showdown settlement, uncontested
-  settlement, bust detection, game completion, undo snapshots, and stack
-  correction;
-- application session and one-active-game repository boundary for persistence,
-  recovery, revision conflicts, reset, undo orchestration, showdown settlement,
-  and stack correction;
-- React browser shell for setup, local recovery, corrupt-record reset, active-game
-  summary, hand start, current-hand verification, legal betting controls,
-  explicit street-transition confirmation, showdown settlement, settled-hand
-  results, and completed-game results.
+- framework-independent domain engine for setup, blinds, turn order, betting, street transitions, all-ins, side pots, showdown settlement, uncontested settlement, bust detection, game completion, stack correction, and invariants;
+- application session and one-active-game repository boundary for persistence, recovery, revision conflicts, reset, undo orchestration with 3 persisted snapshots, showdown settlement, and stack correction;
+- React browser shell for setup, local recovery, corrupt-record reset, active-game summary, hand start, current-hand verification, legal betting controls, explicit street-transition confirmation, showdown settlement, settled-hand results, completed-game results, confirmed undo, stack-correction preview, and compact audit visibility;
+- static PWA shell with manifest icon, scoped service-worker registration, GitHub Pages base-path support, restrictive CSP, and GitHub Pages deployment workflow;
+- automated coverage for domain/application behavior, UI characterization, static build validation, and a Playwright browser smoke path for production-build load, recovery, undo, stack correction, 320 px viewport, accessible names, and offline startup.
 
-The UI intentionally still delegates poker legality and persistence semantics to
-the domain/application seams. Browser storage remains isolated to the IndexedDB
-adapter.
+The UI intentionally delegates poker legality, settlement, persistence, undo, and correction semantics to domain/application seams. Browser storage remains isolated to the IndexedDB adapter.
 
-## Remaining work plan
+## Release checklist
 
-### 1. Complete the operator hand lifecycle UI
+Before publishing a release:
 
-- Preserve settlement form state on rejected settlement commands.
+- run `npm test`, `npm run build`, `npm run lint`, `npm run smoke:static`, and `npm run smoke:browser`;
+- ensure Playwright's Chromium browser is available in the runner (`npx playwright install chromium` if the environment does not preinstall it);
+- build GitHub Pages with `GITHUB_REPOSITORY_NAME` or `BASE_PATH` set when deploying under a project path;
+- manually verify installability on the target mobile browser and confirm local data recovery after closing and reopening the installed PWA.
 
-### 2. Add operator recovery tools
+## Scripts
 
-- Add undo UI for the latest reversible betting/street actions, including the
-  action being reverted, explicit confirmation, persistence, and error display.
-- Add stack-correction UI with read-only commitments, editable stacks, total
-  conservation preview, required reason, audit visibility, and persistence.
-- Cover undo and correction with component tests plus application regression
-  tests where a UI path exposes a new boundary condition.
-
-### 3. Harden the browser operator experience
-
-- Improve responsive layout for mobile/tablet/desktop, including the documented
-  320 px viewport target.
-- Verify keyboard-only operation and accessible labels/status regions for setup,
-  action controls, settlement, undo, and correction flows.
-- Add browser-level smoke coverage for create/recover, complete hand, side-pot
-  settlement, undo, correction, game completion, and reload during betting,
-  deal prompt, showdown, and settled states.
-
-### 4. Ship PWA and GitHub Pages deployment
-
-- Add web app manifest, icons, production base-path handling, static asset
-  caching, and service worker registration scoped to the GitHub Pages deployment.
-- Add GitHub Actions deployment for the static build.
-- Verify installability, offline startup after first load, interrupted-session
-  recovery, and local game restoration on the same browser profile.
-
-### 5. Documentation cleanup
-
-- Keep `README.md`, `docs/design.md`, and ADRs aligned when increment numbering
-  or scope decisions change.
-- Record a new ADR only for material boundary decisions, not for routine UI
-  completion over existing domain/application APIs.
+- `npm test` - Vitest domain, application, and UI characterization suite.
+- `npm run build` - TypeScript build plus Vite production build.
+- `npm run lint` - ESLint.
+- `npm run smoke:static` - validates production static artifacts, CSP, manifest icon, and service-worker scope awareness.
+- `npm run smoke:browser` - launches the production build with Playwright and exercises the critical operator path.

@@ -86,6 +86,87 @@ describe("persistence and recovery", () => {
     expect(settledSession.undoDepth()).toBe(0);
   });
 
+
+  it("persists undo history across reload and undo persists restored state", async () => {
+    const repo = new MemoryGameRepository();
+    const session = new GameSession(repo);
+    await session.replace(fixture(3));
+    await session.startHand({ handId: "hand-1" });
+    await session.act({ playerId: "player-1", type: "call" });
+    await session.act({ playerId: "player-2", type: "call" });
+    expect(session.undoDepth()).toBe(2);
+
+    const reloaded = new GameSession(repo);
+    await reloaded.load();
+    expect(reloaded.undoDepth()).toBe(2);
+    await reloaded.undo();
+    expect(reloaded.current()?.currentHand?.actions.map(({ type }) => type)).toEqual(["call"]);
+    expect(reloaded.current()?.auditLog.at(-1)).toMatchObject({ type: "undo" });
+
+    const reloadedAgain = new GameSession(repo);
+    await reloadedAgain.load();
+    expect(reloadedAgain.current()?.currentHand?.actions.map(({ type }) => type)).toEqual(["call"]);
+    expect(reloadedAgain.undoDepth()).toBe(1);
+  });
+
+  it("persists only the latest 3 undo snapshots", async () => {
+    const repo = new MemoryGameRepository();
+    const session = new GameSession(repo);
+    await session.replace(fixture(2));
+    await session.startHand({ handId: "hand-1" });
+    await session.act({ playerId: "player-1", type: "call" });
+    await session.act({ playerId: "player-2", type: "check" });
+    await session.confirmStreet();
+    await session.act({ playerId: "player-2", type: "check" });
+    expect(session.undoDepth()).toBe(3);
+    const reloaded = new GameSession(repo);
+    await reloaded.load();
+    expect(reloaded.undoDepth()).toBe(3);
+  });
+
+  it("clears persisted undo for new hand, settlement, stack correction, reset, and replace", async () => {
+    const repo = new MemoryGameRepository();
+    const session = new GameSession(repo);
+    await session.replace(fixture(2));
+    await session.startHand({ handId: "hand-1" });
+    await session.act({ playerId: "player-1", type: "call" });
+    await session.correctStacks({ reason: "count", stacks: { "player-1": 990, "player-2": 990 } });
+    const afterCorrection = new GameSession(repo);
+    await afterCorrection.load();
+    expect(afterCorrection.undoDepth()).toBe(0);
+
+    await session.replace(fixture(2));
+    await session.startHand({ handId: "hand-2" });
+    await session.act({ playerId: "player-1", type: "allIn" });
+    await session.act({ playerId: "player-2", type: "call" });
+    expect(session.undoDepth()).toBe(2);
+    await session.settleShowdown([{ potIndex: 0, winnerPlayerIds: ["player-1"] }]);
+    const afterSettlement = new GameSession(repo);
+    await afterSettlement.load();
+    expect(afterSettlement.undoDepth()).toBe(0);
+
+    await session.startHand({ handId: "hand-3" });
+    const afterNewHand = new GameSession(repo);
+    await afterNewHand.load();
+    expect(afterNewHand.undoDepth()).toBe(0);
+
+    await session.replace(fixture(2));
+    await session.startHand({ handId: "hand-5" });
+    await session.act({ playerId: session.current()?.currentHand?.actorPlayerId ?? "player-1", type: "call" });
+    expect(session.undoDepth()).toBe(1);
+    await session.replace(fixture(2));
+    const afterReplace = new GameSession(repo);
+    await afterReplace.load();
+    expect(afterReplace.undoDepth()).toBe(0);
+
+    await session.startHand({ handId: "hand-6" });
+    await session.act({ playerId: "player-1", type: "call" });
+    expect(session.undoDepth()).toBe(1);
+    await session.reset();
+    await session.load();
+    expect(session.undoDepth()).toBe(0);
+  });
+
   it("requires correction reasons and preserves chip supply including commitments", async () => {
     const game = ok(startHand(fixture(3), { handId: "hand-1" }));
     const session = new GameSession(new MemoryGameRepository());

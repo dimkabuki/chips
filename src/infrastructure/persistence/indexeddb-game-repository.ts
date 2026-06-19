@@ -25,12 +25,12 @@ export class IndexedDbGameRepository implements GameRepository {
       return raw === undefined ? { ok: true, envelope: undefined } : parsePersistedEnvelope(raw);
     } finally { db.close(); }
   }
-  async save(game: Game, expectedRevision: number | undefined): Promise<SaveGameResult> {
+  async save(game: Game, expectedRevision: number | undefined, undoSnapshots: readonly Game[] = []): Promise<SaveGameResult> {
     const loaded = await this.load();
     if (!loaded.ok) return { ok: false, code: "persistence.revisionConflict", actualRevision: undefined };
     const actual = loaded.envelope?.revision;
     if (actual !== expectedRevision) return { ok: false, code: "persistence.revisionConflict", actualRevision: actual };
-    const envelope = createEnvelope(game, (actual ?? 0) + 1);
+    const envelope = createEnvelope(game, (actual ?? 0) + 1, undefined, undoSnapshots);
     const db = await openDb();
     try {
       await requestAsPromise(db.transaction(STORE, "readwrite").objectStore(STORE).put(serializeEnvelope(envelope), KEY));

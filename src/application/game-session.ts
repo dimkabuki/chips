@@ -12,9 +12,16 @@ export class GameSession {
   constructor(private readonly repository: GameRepository) {}
   current(): Game | undefined { return this.game; }
   undoDepth(): number { return this.undoSnapshots.length; }
+  lastUndoDescription(): string | undefined {
+    const hand = this.game?.currentHand;
+    const action = hand?.actions.at(-1);
+    if (action === undefined) return undefined;
+    const player = this.game?.players.find(({ id }) => id === action.playerId)?.name ?? action.playerId;
+    return `${player} ${action.type} for ${String(action.chipsAdded)} chips`;
+  }
   async load(): Promise<LoadGameResult> {
     const result = await this.repository.load();
-    if (result.ok) { this.game = result.envelope?.game; this.revision = result.envelope?.revision; this.undoSnapshots = []; }
+    if (result.ok) { this.game = result.envelope?.game; this.revision = result.envelope?.revision; this.undoSnapshots = [...(result.envelope?.undoSnapshots ?? [])].slice(0, 3); }
     return result;
   }
   async reset(): Promise<void> { await this.repository.delete(); this.game = undefined; this.revision = undefined; this.undoSnapshots = []; }
@@ -44,7 +51,7 @@ export class GameSession {
   }
   private async persist(): Promise<SaveGameResult> {
     if (this.game === undefined) throw new Error("No game to persist.");
-    const saved = await this.repository.save(this.game, this.revision);
+    const saved = await this.repository.save(this.game, this.revision, this.undoSnapshots);
     if (saved.ok) this.revision = saved.envelope.revision;
     return saved;
   }
