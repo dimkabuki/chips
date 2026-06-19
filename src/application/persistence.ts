@@ -33,8 +33,16 @@ const stable = (value: unknown): string => {
 };
 
 export const checksumGame = (game: Game): string => {
+  return checksumStable(game);
+};
+
+const checksumEnvelopeContent = (game: Game, undoSnapshots: readonly Game[]): string => {
+  return checksumStable({ game, undoSnapshots });
+};
+
+const checksumStable = (value: unknown): string => {
   let hash = 0x811c9dc5;
-  for (const char of stable(game)) {
+  for (const char of stable(value)) {
     hash ^= char.charCodeAt(0);
     hash = Math.imul(hash, 0x01000193) >>> 0;
   }
@@ -45,7 +53,7 @@ export const createEnvelope = (game: Game, revision: number, savedAt = new Date(
   schemaVersion: CURRENT_PERSISTENCE_SCHEMA_VERSION,
   revision,
   savedAt,
-  checksum: checksumGame(game),
+  checksum: checksumEnvelopeContent(game, undoSnapshots),
   game,
   undoSnapshots,
 });
@@ -60,13 +68,13 @@ export const migrateGameToCurrent = (value: unknown): { ok: true; game: Game } |
 export const parsePersistedEnvelope = (raw: string): LoadGameResult => {
   let parsed: unknown;
   try { parsed = JSON.parse(raw); } catch { return { ok: false, code: "persistence.parse" }; }
-  if (!isObject(parsed) || typeof parsed.revision !== "number" || typeof parsed.checksum !== "string" || typeof parsed.savedAt !== "string") {
+  if (!isObject(parsed) || typeof parsed.revision !== "number" || typeof parsed.checksum !== "string" || typeof parsed.savedAt !== "string" || typeof parsed.schemaVersion !== "number") {
     return { ok: false, code: "persistence.parse" };
   }
+  if (parsed.schemaVersion !== 1 && parsed.schemaVersion !== CURRENT_PERSISTENCE_SCHEMA_VERSION) return { ok: false, code: "persistence.migration" };
   const migrated = migrateGameToCurrent(parsed.game);
   if (!migrated.ok) return { ok: false, code: "persistence.migration" };
-  if (checksumGame(migrated.game) !== parsed.checksum) return { ok: false, code: "persistence.checksum" };
-  const rawSnapshots = Array.isArray(parsed.undoSnapshots) ? parsed.undoSnapshots : [];
+  const rawSnapshots = parsed.schemaVersion === 1 ? [] : Array.isArray(parsed.undoSnapshots) ? parsed.undoSnapshots : [];
   const undoSnapshots: Game[] = [];
   for (const snapshot of rawSnapshots.slice(0, 3)) {
     const migratedSnapshot = migrateGameToCurrent(snapshot);
@@ -74,6 +82,8 @@ export const parsePersistedEnvelope = (raw: string): LoadGameResult => {
     if (validateGameInvariants(migratedSnapshot.game).length > 0) return { ok: false, code: "persistence.invariant" };
     undoSnapshots.push(migratedSnapshot.game);
   }
+  const expectedChecksum = parsed.schemaVersion === 1 ? checksumGame(migrated.game) : checksumEnvelopeContent(migrated.game, undoSnapshots);
+  if (expectedChecksum !== parsed.checksum) return { ok: false, code: "persistence.checksum" };
   if (validateGameInvariants(migrated.game).length > 0) return { ok: false, code: "persistence.invariant" };
   return { ok: true, envelope: { schemaVersion: CURRENT_PERSISTENCE_SCHEMA_VERSION, revision: parsed.revision, savedAt: parsed.savedAt, checksum: parsed.checksum, game: migrated.game, undoSnapshots } };
 };

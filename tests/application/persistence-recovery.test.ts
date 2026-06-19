@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { GameSession } from "../../src/application/game-session.js";
 import { MemoryGameRepository } from "../../src/application/memory-repository.js";
-import { checksumGame, createEnvelope, serializeEnvelope } from "../../src/application/persistence.js";
+import { checksumGame, createEnvelope, parsePersistedEnvelope, serializeEnvelope } from "../../src/application/persistence.js";
 import { AVATARS, createGame, type CreatePlayerInput } from "../../src/domain/game/create-game.js";
 import { act, confirmStreet, getLegalActions, settleShowdown, startHand } from "../../src/domain/game/hand-engine.js";
 import type { Game } from "../../src/domain/game/game.js";
@@ -32,6 +32,7 @@ describe("persistence and recovery", () => {
   it.each([
     ["truncated JSON", "{" , "persistence.parse"],
     ["checksum-invalid", serializeEnvelope({ ...createEnvelope(fixture(), 1), checksum: "bad" }), "persistence.checksum"],
+    ["undo-checksum-invalid", serializeEnvelope({ ...createEnvelope(fixture(), 1, undefined, [fixture()]), undoSnapshots: [{ ...fixture(), id: "tampered" }] }), "persistence.checksum"],
     ["migration-invalid", JSON.stringify({ ...createEnvelope(fixture(), 1), game: { schemaVersion: 0 } }), "persistence.migration"],
     ["invariant-invalid", serializeEnvelope(createEnvelope({ ...fixture(), players: fixture().players.map((p) => ({ ...p, stack: 1 })) }, 1)), "persistence.invariant"],
   ])("fails closed for %s", async (_name, raw, code) => {
@@ -175,7 +176,15 @@ describe("persistence and recovery", () => {
     await expect(session.correctStacks({ reason: "bad count", stacks: { "player-1": 2_000 } })).resolves.toMatchObject({ ok: false, errors: [{ code: "correction.chips.conserved" }] });
   });
 
-  it("uses checksum over game content only", () => {
-    expect(checksumGame(fixture())).toBe(checksumGame(fixture()));
+  it("uses checksum over game and undo snapshot content, not envelope metadata", () => {
+    const game = fixture();
+    expect(createEnvelope(game, 1, "2026-01-01T00:00:00.000Z").checksum).toBe(createEnvelope(game, 2, "2026-01-02T00:00:00.000Z").checksum);
+    expect(createEnvelope(game, 1, undefined, [game]).checksum).not.toBe(createEnvelope(game, 1, undefined, []).checksum);
+  });
+
+  it("migrates prior envelopes without undo snapshots", () => {
+    const game = fixture();
+    const previousEnvelope = { ...createEnvelope(game, 1), schemaVersion: 1, checksum: checksumGame(game), undoSnapshots: undefined };
+    expect(parsePersistedEnvelope(serializeEnvelope(previousEnvelope))).toMatchObject({ ok: true, envelope: { game, undoSnapshots: [] } });
   });
 });
