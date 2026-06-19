@@ -228,6 +228,49 @@ describe("operator UI shell", () => {
     expect(text()).toContain("Current actor: Ada");
   });
 
+  it("undoes the last undoable command through the session seam and persists the restored game", async () => {
+    const repo = new MemoryGameRepository(serializeEnvelope(createEnvelope(fixtureGame(), 1)));
+    const { session } = await setup(repo);
+    await click("Start hand");
+    expect(required(document.querySelector<HTMLButtonElement>("[data-action='undo']")).disabled).toBe(true);
+    await clickAction("raise");
+    expect(session.undoDepth()).toBe(1);
+    expect(text()).toContain("Undo last action");
+    expect(required(document.querySelector<HTMLButtonElement>("[data-action='undo']")).disabled).toBe(false);
+    await clickAction("undo");
+    expect(session.undoDepth()).toBe(0);
+    expect(session.current()?.currentHand?.actions).toEqual([]);
+    expect(repo.rawValue()).toContain('"type":"undo"');
+    expect(text()).toContain("Action log: none");
+    expect(required(document.querySelector<HTMLButtonElement>("[data-action='undo']")).disabled).toBe(true);
+  });
+
+  it("corrects stacks through the session seam with a reason and persisted audit entry", async () => {
+    const repo = new MemoryGameRepository(serializeEnvelope(createEnvelope(fixtureGame(), 1)));
+    const { session } = await setup(repo);
+    setInput("[name='correction-player-1']", "900");
+    setInput("[name='correction-player-2']", "1100");
+    setInput("[name='correction-reason']", "chip count");
+    await clickAction("correct-stacks");
+    expect(session.current()?.players.map(({ stack }) => stack)).toEqual([900, 1100]);
+    expect(repo.rawValue()).toContain('"type":"stackCorrection"');
+    expect(repo.rawValue()).toContain('"reason":"chip count"');
+    expect(text()).toContain("Ada (red) - stack 900");
+    expect(text()).toContain("Linus (blue) - stack 1100");
+  });
+
+  it("surfaces rejected stack corrections without replacing current UI state", async () => {
+    const { session } = await setup(new MemoryGameRepository(serializeEnvelope(createEnvelope(fixtureGame(), 1))));
+    const before = session.current();
+    setInput("[name='correction-player-1']", "900");
+    setInput("[name='correction-player-2']", "1000");
+    setInput("[name='correction-reason']", "bad count");
+    await clickAction("correct-stacks");
+    expect(text()).toContain("Correction must preserve total chip supply.");
+    expect(session.current()).toBe(before);
+    expect(text()).toContain("Ada (red) - stack 1000");
+  });
+
   it("confirms pending street prompts through the session seam and persists advancement", async () => {
     const game = fixtureGame();
     const started = startHand(game, { handId: "hand-fixed" });

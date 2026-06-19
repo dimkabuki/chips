@@ -1,9 +1,16 @@
 :root { color-scheme: light dark; font-family: system-ui, sans-serif; }
-body { margin: 0; padding: 1rem; }
+body { margin: 0; padding: clamp(0.75rem, 2vw, 1.5rem); }
 section { max-width: 48rem; margin: auto; }
 fieldset, label { display: grid; gap: 0.35rem; margin-block: 0.75rem; }
-input, select, button { font: inherit; padding: 0.55rem; }
+input, select, button { box-sizing: border-box; font: inherit; min-height: 2.75rem; padding: 0.55rem; width: 100%; }
 button { margin-block-start: 1rem; }
+button:focus-visible, input:focus-visible, select:focus-visible { outline: 0.2rem solid Highlight; outline-offset: 0.15rem; }
 [role="alert"] { color: #b42318; }
 [role="status"] { color: #027a48; }
 ul { padding-inline-start: 1.25rem; }
+
+@media (min-width: 48rem) {
+  fieldset { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  fieldset > legend, fieldset > p { grid-column: 1 / -1; }
+  button { width: auto; }
+}

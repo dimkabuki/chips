@@ -4,12 +4,13 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
+    "build": "tsc -p tsconfig.build.json && vite build",
     "lint": "eslint .",
     "test": "vitest run",
     "test:watch": "vitest",
     "dev": "vite",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "smoke:browser": "node scripts/smoke-build.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^9.28.0",

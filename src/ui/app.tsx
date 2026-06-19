@@ -130,6 +130,20 @@ const HandResult = ({ game, hand }: { readonly game: Game; readonly hand: Hand }
   })}</ul></section>;
 };
 
+const readStackCorrection = (root: HTMLElement, game: Game): { readonly stacks: Record<string, number>; readonly reason: string } => ({
+  stacks: Object.fromEntries(game.players.map((player) => [player.id, Number(root.querySelector<HTMLInputElement>(`[name='correction-${player.id}']`)?.value ?? player.stack)])),
+  reason: root.querySelector<HTMLInputElement>("[name='correction-reason']")?.value ?? "",
+});
+
+const StackCorrection = ({ game, session, run }: { readonly game: Game; readonly session: GameSession; readonly run: (command: () => Promise<Awaited<ReturnType<GameSession["replace"]>>>) => void }) => {
+  const rootRef = useRef<HTMLElement>(null);
+  return <section aria-label="stack-correction" ref={rootRef}><h3>Stack correction</h3>{game.players.map((player) => <label key={player.id}>{player.name} corrected stack <input name={`correction-${player.id}`} defaultValue={String(player.stack)} inputMode="numeric" /></label>)}<label>Correction reason <input name="correction-reason" maxLength={120} /></label><button type="button" data-action="correct-stacks" onClick={() => {
+    const root = rootRef.current;
+    if (root === null) return;
+    run(() => session.correctStacks(readStackCorrection(root, game)));
+  }}>Apply stack correction</button></section>;
+};
+
 const CurrentHand = ({ game, session, run }: { readonly game: Game; readonly session: GameSession; readonly run: (command: () => Promise<Awaited<ReturnType<GameSession["replace"]>>>) => void }) => {
   const hand = game.currentHand;
   if (hand === undefined) return <p>Current hand: none</p>;
@@ -150,7 +164,7 @@ const ActiveGameScreen = ({ state, session, setState }: { readonly state: State;
   const dealer = game.players.find((p) => p.id === game.dealerPlayerId)?.name ?? game.dealerPlayerId;
   const canStart = game.status === "active" && (game.currentHand === undefined || game.currentHand.status === "settled");
   const winners = game.players.filter(({ stack }) => stack > 0);
-  return <>{state.recovered ? <p role="status">Recovered saved game.</p> : null}<section aria-label="active-game"><h2>Active game</h2><div role="alert">{state.commandErrors.map((error) => <p key={error}>{error}</p>)}</div><p>Status: {game.status}</p><p>Dealer: {dealer}</p><p>Blinds: {String(game.settings.smallBlind)}/{String(game.settings.bigBlind)}</p>{game.status === "completed" ? <section aria-label="completed-game"><h2>Game completed</h2><p>Final winner: {winners.length === 1 ? winners[0]?.name ?? "unknown" : "undetermined"}</p></section> : null}<CurrentHand game={game} session={session} run={run} /><ul>{game.players.map((p) => <li key={p.id}>{String(p.seat + 1)}. {p.name} ({p.avatar}) - stack {String(p.stack)} - {p.status}</li>)}</ul>{canStart ? <button type="button" data-action="start-hand" onClick={() => { run(() => session.startHand({ handId: `hand-${Date.now().toString()}` })); }}>Start hand</button> : null}<button type="button" data-action="new-game" onClick={() => { setState((current) => ({ ...current, screen: "setup", replacing: session.current() !== undefined, recovered: false, errors: [], commandErrors: [] })); }}>New game</button></section></>;
+  return <>{state.recovered ? <p role="status">Recovered saved game.</p> : null}<section aria-label="active-game"><h2>Active game</h2><div role="alert">{state.commandErrors.map((error) => <p key={error}>{error}</p>)}</div><p>Status: {game.status}</p><p>Dealer: {dealer}</p><p>Blinds: {String(game.settings.smallBlind)}/{String(game.settings.bigBlind)}</p>{game.status === "completed" ? <section aria-label="completed-game"><h2>Game completed</h2><p>Final winner: {winners.length === 1 ? winners[0]?.name ?? "unknown" : "undetermined"}</p></section> : null}<CurrentHand game={game} session={session} run={run} /><ul>{game.players.map((p) => <li key={p.id}>{String(p.seat + 1)}. {p.name} ({p.avatar}) - stack {String(p.stack)} - {p.status}</li>)}</ul><button type="button" data-action="undo" disabled={session.undoDepth() === 0} onClick={() => { run(() => session.undo()); }}>Undo last action</button><StackCorrection game={game} session={session} run={run} />{canStart ? <button type="button" data-action="start-hand" onClick={() => { run(() => session.startHand({ handId: `hand-${Date.now().toString()}` })); }}>Start hand</button> : null}<button type="button" data-action="new-game" onClick={() => { setState((current) => ({ ...current, screen: "setup", replacing: session.current() !== undefined, recovered: false, errors: [], commandErrors: [] })); }}>New game</button></section></>;
 };
 
 const readSetupForm = (root: HTMLElement, current: SetupForm): SetupForm => ({
