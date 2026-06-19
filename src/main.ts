@@ -7,3 +7,9 @@ const root = document.querySelector<HTMLDivElement>("#app");
 if (root === null) throw new Error("Missing #app root.");
 
 void renderApp(root, { session: new GameSession(new IndexedDbGameRepository()) });
+
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    void navigator.serviceWorker.register("sw.js");
+  });
+}
