@@ -1,5 +1,7 @@
-const CACHE_NAME = "chips-static-v1";
-const STATIC_ASSETS = ["./", "./index.html", "./manifest.webmanifest"];
+const CACHE_NAME = "chips-static-v2";
+const scopeUrl = new URL(self.registration.scope);
+const scoped = (path) => new URL(path, scopeUrl).toString();
+const STATIC_ASSETS = [scoped("./"), scoped("./index.html"), scoped("./manifest.webmanifest")];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(STATIC_ASSETS)));
@@ -17,5 +19,5 @@ self.addEventListener("fetch", (event) => {
     const copy = response.clone();
     caches.open(CACHE_NAME).then((cache) => { void cache.put(event.request, copy); });
     return response;
-  }).catch(() => caches.match("./index.html"))));
+  }).catch(() => caches.match(scoped("./index.html")))));
 });

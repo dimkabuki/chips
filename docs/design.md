@@ -1,6 +1,6 @@
 # Chips - Product and Technical Design
 
-Status: Proposed
+Status: Implemented for v1
 Date: 2026-06-14
 
 ## 1. Summary
@@ -390,7 +390,6 @@ Hand
   lastFullRaiseSize
   participants[]
   actions[]
-  undoSnapshots[]
   pendingTransition?
 
 HandParticipant
@@ -501,13 +500,14 @@ PersistedGameEnvelope
   savedAt
   checksum
   game
+  undoSnapshots
 ```
 
 The repository interface:
 
 ```text
 load(): PersistedGameEnvelope | null
-save(expectedRevision, game): newRevision
+save(expectedRevision, game, undoSnapshots): newRevision
 delete(): void
 ```
 
@@ -646,6 +646,9 @@ failing test before implementation where practical.
 
 ### 14.3 UI and end-to-end tests
 
+The automated suite provides basic browser-level smoke coverage for the critical operator path, 320 px viewport, accessible names, and offline startup. The broader release checklist remains manual where it depends on a published GitHub Pages environment or specific mobile installability behavior.
+
+
 - create and restore a game;
 - complete a normal multi-street hand;
 - fold to an uncontested winner;
@@ -694,7 +697,7 @@ Exit criterion: reload at every hand state produces equivalent legal actions.
 - Build setup, table, action panel, street prompts, settlement, results, and
   correction screens.
 
-Exit criterion: complete game flow works at mobile and desktop viewports.
+Exit criterion: complete game flow works at mobile and desktop viewports. Implemented with React UI characterization and browser smoke coverage.
 
 ### Increment 6 - PWA and GitHub Pages
 
@@ -702,8 +705,7 @@ Exit criterion: complete game flow works at mobile and desktop viewports.
   GitHub Actions deployment.
 - Run accessibility, browser, and interrupted-session checks.
 
-Exit criterion: the published GitHub Pages application installs, reloads
-offline, and restores its local game on the same device/browser.
+Exit criterion: the static build supports GitHub Pages base paths, scoped service-worker startup, and local game restoration; published installability remains a release checklist verification on the target browser.
 
 ## 16. Acceptance scenarios
 

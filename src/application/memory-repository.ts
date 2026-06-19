@@ -9,12 +9,12 @@ export class MemoryGameRepository implements GameRepository {
   load(): Promise<LoadGameResult> {
     return Promise.resolve(this.raw === undefined ? { ok: true, envelope: undefined } : parsePersistedEnvelope(this.raw));
   }
-  async save(game: Game, expectedRevision: number | undefined): Promise<SaveGameResult> {
+  async save(game: Game, expectedRevision: number | undefined, undoSnapshots: readonly Game[] = []): Promise<SaveGameResult> {
     const loaded = await this.load();
     if (!loaded.ok) return { ok: false, code: "persistence.revisionConflict", actualRevision: undefined };
     const actual = loaded.envelope?.revision;
     if (expectedRevision !== actual) return { ok: false, code: "persistence.revisionConflict", actualRevision: actual };
-    const envelope = createEnvelope(game, (actual ?? 0) + 1);
+    const envelope = createEnvelope(game, (actual ?? 0) + 1, undefined, undoSnapshots);
     this.raw = serializeEnvelope(envelope);
     return { ok: true, envelope };
   }

@@ -236,6 +236,9 @@ describe("operator UI shell", () => {
     await clickAction("raise");
     expect(session.undoDepth()).toBe(1);
     expect(text()).toContain("Undo last action");
+    expect(text()).toContain("Last reversible action: Ada raise for 15 chips");
+    expect(required(document.querySelector<HTMLButtonElement>("[data-action='undo']")).disabled).toBe(true);
+    checkInput("[name='confirmUndo']");
     expect(required(document.querySelector<HTMLButtonElement>("[data-action='undo']")).disabled).toBe(false);
     await clickAction("undo");
     expect(session.undoDepth()).toBe(0);
@@ -257,6 +260,7 @@ describe("operator UI shell", () => {
     expect(repo.rawValue()).toContain('"reason":"chip count"');
     expect(text()).toContain("Ada (red) - stack 900");
     expect(text()).toContain("Linus (blue) - stack 1100");
+    expect(text()).toContain("#1 stackCorrection - chip count");
   });
 
   it("surfaces rejected stack corrections without replacing current UI state", async () => {
@@ -265,8 +269,8 @@ describe("operator UI shell", () => {
     setInput("[name='correction-player-1']", "900");
     setInput("[name='correction-player-2']", "1000");
     setInput("[name='correction-reason']", "bad count");
-    await clickAction("correct-stacks");
-    expect(text()).toContain("Correction must preserve total chip supply.");
+    expect(text()).toContain("Correction preview does not preserve total chip supply.");
+    expect(required(document.querySelector<HTMLButtonElement>("[data-action='correct-stacks']")).disabled).toBe(true);
     expect(session.current()).toBe(before);
     expect(text()).toContain("Ada (red) - stack 1000");
   });
