@@ -28,6 +28,14 @@ const setAmount = (type: string, value: string): void => {
   amount.value = value;
   amount.dispatchEvent(new Event("input", { bubbles: true }));
 };
+const setInput = (selector: string, value: string): void => {
+  const target = required(document.querySelector<HTMLInputElement>(selector));
+  target.value = value;
+  target.dispatchEvent(new Event("input", { bubbles: true }));
+};
+const checkInput = (selector: string): void => {
+  required(document.querySelector<HTMLInputElement>(selector)).click();
+};
 
 const fixtureGame = () => {
   const result = createGame({ id: "game-existing", smallBlind: 5, bigBlind: 10, initialDealerPlayerId: "player-1", players: [
@@ -261,7 +269,7 @@ describe("operator UI shell", () => {
   it("settles a single showdown pot through the session seam and renders result state", async () => {
     const repo = new MemoryGameRepository(serializeEnvelope(createEnvelope(showdownGame(), 1)));
     const { session } = await setup(repo);
-    required(document.querySelector<HTMLInputElement>("[name='pot-0-winner'][value='player-1']")).checked = true;
+    checkInput("[name='pot-0-winner'][value='player-1']");
     await clickAction("settle-showdown");
     expect(session.current()?.currentHand?.status).toBe("settled");
     expect(repo.rawValue()).toContain('"awards"');
@@ -273,9 +281,9 @@ describe("operator UI shell", () => {
   it("settles side and split pots, persists, and renders awards", async () => {
     const repo = new MemoryGameRepository(serializeEnvelope(createEnvelope(sidePotShowdownGame(), 1)));
     await setup(repo);
-    required(document.querySelector<HTMLInputElement>("[name='pot-0-winner'][value='player-1']")).checked = true;
-    required(document.querySelector<HTMLInputElement>("[name='pot-0-winner'][value='player-2']")).checked = true;
-    required(document.querySelector<HTMLInputElement>("[name='pot-1-winner'][value='player-3']")).checked = true;
+    checkInput("[name='pot-0-winner'][value='player-1']");
+    checkInput("[name='pot-0-winner'][value='player-2']");
+    checkInput("[name='pot-1-winner'][value='player-3']");
     await clickAction("settle-showdown");
     expect(repo.rawValue()).toContain('"potIndex":1');
     expect(text()).toContain("Pot 1 - 150 chips - awards Ada 75, Linus 75");
@@ -285,10 +293,14 @@ describe("operator UI shell", () => {
   it("surfaces invalid showdown rejection without replacing current UI state", async () => {
     const { session } = await setup(new MemoryGameRepository(serializeEnvelope(createEnvelope(showdownGame(), 1))));
     const before = session.current();
+    checkInput("[name='pot-0-winner'][value='player-1']");
+    setInput("[name='pot-0-allocation-player-1']", "1");
     await clickAction("settle-showdown");
-    expect(text()).toContain("Each pot requires a winner.");
+    expect(text()).toContain("Allocations must equal the pot amount.");
     expect(session.current()).toBe(before);
     expect(text()).toContain("Showdown settlement");
+    expect(required(document.querySelector<HTMLInputElement>("[name='pot-0-winner'][value='player-1']")).checked).toBe(true);
+    expect(required(document.querySelector<HTMLInputElement>("[name='pot-0-allocation-player-1']")).value).toBe("1");
   });
 
   it("reloads at showdown with the same settlement prompt", async () => {
@@ -303,7 +315,7 @@ describe("operator UI shell", () => {
   it("reloads after settlement with the same result summary", async () => {
     const repo = new MemoryGameRepository(serializeEnvelope(createEnvelope(showdownGame(), 1)));
     await setup(repo);
-    required(document.querySelector<HTMLInputElement>("[name='pot-0-winner'][value='player-2']")).checked = true;
+    checkInput("[name='pot-0-winner'][value='player-2']");
     await clickAction("settle-showdown");
     await setup(repo);
     expect(text()).toContain("Recovered saved game.");

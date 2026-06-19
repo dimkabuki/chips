@@ -81,20 +81,40 @@ const BettingControls = ({ game, onAction }: { readonly game: Game; readonly onA
   })}</section>;
 };
 
+type ShowdownDraft = Record<number, { readonly winnerPlayerIds: readonly string[]; readonly allocations: Record<string, string> }>;
+
 const ShowdownSettlement = ({ game, hand, onSettle }: { readonly game: Game; readonly hand: Hand; readonly onSettle: (selections: ShowdownSelection[]) => void }) => {
-  const form = useRef<HTMLDivElement>(null);
-  if (hand.status !== "showdown") return null;
+  const form = useRef<HTMLElement>(null);
   const derived = derivePots(game);
-  return <section aria-label="showdown-settlement" ref={form}><h3>Showdown settlement</h3>{Object.entries(derived.returned).length > 0 ? <p>Returned uncalled chips: {Object.entries(derived.returned).map(([id, amount]) => `${playerName(game, id)} ${String(amount)}`).join(", ")}</p> : null}{derived.pots.map((pot, index) => <fieldset data-pot-index={String(index)} key={index}><legend>Pot {String(index + 1)} - {String(pot.amount)} chips</legend><p>Eligible winners: {pot.eligiblePlayerIds.map((id) => playerName(game, id)).join(", ")}</p>{pot.eligiblePlayerIds.map((id) => <React.Fragment key={id}><label><input type="checkbox" name={`pot-${String(index)}-winner`} value={id} /> {playerName(game, id)}</label><label>Manual allocation for {playerName(game, id)} <input name={`pot-${String(index)}-allocation-${id}`} inputMode="numeric" /></label></React.Fragment>)}</fieldset>)}<button type="button" data-action="settle-showdown" onClick={() => {
+  const draftKey = `${hand.id}:${derived.pots.map((pot) => `${String(pot.amount)}:${pot.eligiblePlayerIds.join("|")}`).join(";")}`;
+  const [draft, setDraft] = useState<ShowdownDraft>({});
+  useEffect(() => { setDraft({}); }, [draftKey]);
+  if (hand.status !== "showdown") return null;
+  const potDraft = (potIndex: number) => draft[potIndex] ?? { winnerPlayerIds: [], allocations: {} };
+  const updateWinner = (potIndex: number, playerId: string, checked: boolean): void => {
+    setDraft((current) => {
+      const currentPot = current[potIndex] ?? { winnerPlayerIds: [], allocations: {} };
+      const winnerPlayerIds = checked ? [...currentPot.winnerPlayerIds, playerId] : currentPot.winnerPlayerIds.filter((id) => id !== playerId);
+      return { ...current, [potIndex]: { ...currentPot, winnerPlayerIds } };
+    });
+  };
+  const updateAllocation = (potIndex: number, playerId: string, value: string): void => {
+    setDraft((current) => {
+      const currentPot = current[potIndex] ?? { winnerPlayerIds: [], allocations: {} };
+      return { ...current, [potIndex]: { ...currentPot, allocations: { ...currentPot.allocations, [playerId]: value } } };
+    });
+  };
+  return <section aria-label="showdown-settlement" ref={form}><h3>Showdown settlement</h3>{Object.entries(derived.returned).length > 0 ? <p>Returned uncalled chips: {Object.entries(derived.returned).map(([id, amount]) => `${playerName(game, id)} ${String(amount)}`).join(", ")}</p> : null}{derived.pots.map((pot, index) => {
+    const currentDraft = potDraft(index);
+    return <fieldset data-pot-index={String(index)} key={index}><legend>Pot {String(index + 1)} - {String(pot.amount)} chips</legend><p>Eligible winners: {pot.eligiblePlayerIds.map((id) => playerName(game, id)).join(", ")}</p>{pot.eligiblePlayerIds.map((id) => <React.Fragment key={id}><label><input type="checkbox" name={`pot-${String(index)}-winner`} value={id} checked={currentDraft.winnerPlayerIds.includes(id)} onChange={(event) => { updateWinner(index, id, event.currentTarget.checked); }} /> {playerName(game, id)}</label><label>Manual allocation for {playerName(game, id)} <input name={`pot-${String(index)}-allocation-${id}`} inputMode="numeric" value={currentDraft.allocations[id] ?? ""} onInput={(event) => { updateAllocation(index, id, event.currentTarget.value); }} /></label></React.Fragment>)}</fieldset>;
+  })}<button type="button" data-action="settle-showdown" onClick={() => {
     const selections = derived.pots.map((_pot, potIndex) => {
-      const root = form.current;
-      const checked = root === null ? [] : Array.from(root.querySelectorAll<HTMLInputElement>(`[name='pot-${String(potIndex)}-winner']:checked`));
-      const winnerPlayerIds = checked.map(({ value }) => value);
-      const allocationEntries = winnerPlayerIds.flatMap((id) => {
-        const raw = root?.querySelector<HTMLInputElement>(`[name='pot-${String(potIndex)}-allocation-${id}']`)?.value.trim() ?? "";
+      const currentDraft = potDraft(potIndex);
+      const allocationEntries = currentDraft.winnerPlayerIds.flatMap((id) => {
+        const raw = form.current?.querySelector<HTMLInputElement>(`[name='pot-${String(potIndex)}-allocation-${id}']`)?.value.trim() ?? currentDraft.allocations[id]?.trim() ?? "";
         return raw === "" ? [] : [[id, Number(raw)] as const];
       });
-      return { potIndex, winnerPlayerIds, ...(allocationEntries.length === 0 ? {} : { allocations: Object.fromEntries(allocationEntries) }) };
+      return { potIndex, winnerPlayerIds: [...currentDraft.winnerPlayerIds], ...(allocationEntries.length === 0 ? {} : { allocations: Object.fromEntries(allocationEntries) }) };
     });
     onSettle(selections);
   }}>Settle showdown</button></section>;
