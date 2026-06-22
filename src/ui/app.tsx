@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import * as Dialog from "@radix-ui/react-dialog";
 import { flushSync } from "react-dom";
 import { createRoot, type Root } from "react-dom/client";
 import type { GameSession } from "../application/game-session.js";
@@ -7,6 +8,11 @@ import type { Game, Hand, HandParticipant } from "../domain/game/game.js";
 import { AVATARS, createGame, type ValidationIssue } from "../domain/game/create-game.js";
 import { derivePots, getLegalActions, type PlayerActionType, type ShowdownSelection } from "../domain/game/hand-engine.js";
 import { defaultSetupForm, previewSetup, toCreateGameInput, type SetupForm } from "./setup.js";
+import { Alert } from "./components/alert.js";
+import { Badge } from "./components/badge.js";
+import { Button } from "./components/button.js";
+import { Card } from "./components/card.js";
+import { Field, Select, TextInput } from "./components/field.js";
 
 export interface RenderAppOptions { readonly session: GameSession; }
 
@@ -42,9 +48,23 @@ const saveErrorMessage = (saved: Awaited<ReturnType<GameSession["replace"]>>): s
   return "The game could not be saved.";
 };
 
+const ConfirmDialog = ({ title, description, trigger, children }: { readonly title: string; readonly description: string; readonly trigger: React.ReactNode; readonly children: React.ReactNode }) => (
+  <Dialog.Root>
+    <Dialog.Trigger asChild>{trigger}</Dialog.Trigger>
+    <Dialog.Portal>
+      <Dialog.Overlay className="dialog__overlay" />
+      <Dialog.Content className="dialog__content">
+        <Dialog.Title className="dialog__title">{title}</Dialog.Title>
+        <Dialog.Description className="dialog__description">{description}</Dialog.Description>
+        <div className="dialog__actions">{children}<Dialog.Close asChild><Button type="button" variant="ghost">Cancel</Button></Dialog.Close></div>
+      </Dialog.Content>
+    </Dialog.Portal>
+  </Dialog.Root>
+);
+
 const ParticipantRow = ({ game, participant }: { readonly game: Game; readonly participant: HandParticipant }) => {
   const player = game.players.find(({ id }) => id === participant.playerId);
-  return <li>{String((player?.seat ?? 0) + 1)}. {player?.name ?? participant.playerId} - stack {String(player?.stack ?? 0)} - street {String(participant.streetCommitment)} - hand {String(participant.handCommitment)} - {participant.folded ? "folded" : "live"} - {participant.allIn ? "all-in" : "not all-in"}</li>;
+  return <li className="participant-row"><span>{String((player?.seat ?? 0) + 1)}. {player?.name ?? participant.playerId} - stack {String(player?.stack ?? 0)} - street {String(participant.streetCommitment)} - hand {String(participant.handCommitment)} - {participant.folded ? "folded" : "live"} - {participant.allIn ? "all-in" : "not all-in"}</span><span className="badge-row"><Badge tone={participant.folded ? "danger" : "success"}>{participant.folded ? "folded" : "live"}</Badge>{participant.allIn ? <Badge tone="warning">all-in</Badge> : null}</span></li>;
 };
 
 const ActionLog = ({ game, hand }: { readonly game: Game; readonly hand: Hand }) => hand.actions.length === 0
@@ -71,13 +91,13 @@ const BettingControls = ({ game, onAction }: { readonly game: Game; readonly onA
   }, []);
   if (legal === undefined || hand === undefined) return null;
   return <section aria-label="betting-actions" ref={rootRef}><h3>Actions for {playerName(game, legal.playerId)}</h3>{legal.actions.map((action) => {
-    if (action.type === "fold" || action.type === "check") return <button key={action.type} type="button" data-action={action.type} onClick={(event) => { onAction(event.currentTarget.dataset.action as PlayerActionType); }}>{action.type === "fold" ? "Fold" : "Check"}</button>;
-    if (action.type === "call") return <button key="call" type="button" data-action="call" onClick={(event) => { onAction(event.currentTarget.dataset.action as PlayerActionType); }}>Call {String(action.targetStreetCommitment)} (+{String(action.chipsAdded)})</button>;
-    if (action.type === "allIn") return <button key="allIn" type="button" data-action="allIn" onClick={(event) => { onAction(event.currentTarget.dataset.action as PlayerActionType); }}>All-in {String(action.targetStreetCommitment)} (+{String(action.chipsAdded)})</button>;
+    if (action.type === "fold" || action.type === "check") return <Button key={action.type} type="button" variant={action.type === "fold" ? "danger" : "secondary"} data-action={action.type} onClick={(event) => { onAction(event.currentTarget.dataset.action as PlayerActionType); }}>{action.type === "fold" ? "Fold" : "Check"}</Button>;
+    if (action.type === "call") return <Button key="call" type="button" variant="primary" data-action="call" onClick={(event) => { onAction(event.currentTarget.dataset.action as PlayerActionType); }}>Call {String(action.targetStreetCommitment)} (+{String(action.chipsAdded)})</Button>;
+    if (action.type === "allIn") return <Button key="allIn" type="button" variant="danger" data-action="allIn" onClick={(event) => { onAction(event.currentTarget.dataset.action as PlayerActionType); }}>All-in {String(action.targetStreetCommitment)} (+{String(action.chipsAdded)})</Button>;
     const value = targets[action.type] ?? String(action.minTarget);
     const numeric = Number(value);
     const label = action.type === "bet" ? "Bet" : "Raise";
-    return <React.Fragment key={action.type}><label>{label} target <input name={`${action.type}-target`} defaultValue={value} inputMode="numeric" data-amount-type={action.type} /></label><p data-preview={action.type}>{label} target {String(numeric)}, cost {String(numeric - (actor?.streetCommitment ?? 0))}</p><button type="button" data-action={action.type} onClick={(event) => { onAction(event.currentTarget.dataset.action as PlayerActionType, numeric); }}>{label}</button></React.Fragment>;
+    return <React.Fragment key={action.type}><Field label={`${label} target`}><TextInput name={`${action.type}-target`} defaultValue={value} inputMode="numeric" data-amount-type={action.type} /></Field><p data-preview={action.type}>{label} target {String(numeric)}, cost {String(numeric - (actor?.streetCommitment ?? 0))}</p><Button type="button" variant="primary" data-action={action.type} onClick={(event) => { onAction(event.currentTarget.dataset.action as PlayerActionType, numeric); }}>{label}</Button></React.Fragment>;
   })}</section>;
 };
 
@@ -107,7 +127,7 @@ const ShowdownSettlement = ({ game, hand, onSettle }: { readonly game: Game; rea
   return <section aria-label="showdown-settlement" ref={form}><h3>Showdown settlement</h3>{Object.entries(derived.returned).length > 0 ? <p>Returned uncalled chips: {Object.entries(derived.returned).map(([id, amount]) => `${playerName(game, id)} ${String(amount)}`).join(", ")}</p> : null}{derived.pots.map((pot, index) => {
     const currentDraft = potDraft(index);
     return <fieldset data-pot-index={String(index)} key={index}><legend>Pot {String(index + 1)} - {String(pot.amount)} chips</legend><p>Eligible winners: {pot.eligiblePlayerIds.map((id) => playerName(game, id)).join(", ")}</p>{pot.eligiblePlayerIds.map((id) => <React.Fragment key={id}><label><input type="checkbox" name={`pot-${String(index)}-winner`} value={id} checked={currentDraft.winnerPlayerIds.includes(id)} onChange={(event) => { updateWinner(index, id, event.currentTarget.checked); }} /> {playerName(game, id)}</label><label>Manual allocation for {playerName(game, id)} <input name={`pot-${String(index)}-allocation-${id}`} inputMode="numeric" value={currentDraft.allocations[id] ?? ""} onInput={(event) => { updateAllocation(index, id, event.currentTarget.value); }} /></label></React.Fragment>)}</fieldset>;
-  })}<button type="button" data-action="settle-showdown" onClick={() => {
+  })}<Button type="button" variant="primary" data-action="settle-showdown" onClick={() => {
     const selections = derived.pots.map((_pot, potIndex) => {
       const currentDraft = potDraft(potIndex);
       const allocationEntries = currentDraft.winnerPlayerIds.flatMap((id) => {
@@ -117,7 +137,7 @@ const ShowdownSettlement = ({ game, hand, onSettle }: { readonly game: Game; rea
       return { potIndex, winnerPlayerIds: [...currentDraft.winnerPlayerIds], ...(allocationEntries.length === 0 ? {} : { allocations: Object.fromEntries(allocationEntries) }) };
     });
     onSettle(selections);
-  }}>Settle showdown</button></section>;
+  }}>Settle showdown</Button></section>;
 };
 
 const HandResult = ({ game, hand }: { readonly game: Game; readonly hand: Hand }) => {
@@ -154,9 +174,9 @@ const StackCorrection = ({ game, session, run }: { readonly game: Game; readonly
   const commitmentTotal = Object.values(commitments).reduce((total, amount) => total + amount, 0);
   const previewTotal = correctedTotal + commitmentTotal;
   const conserves = previewTotal === game.chipSupply;
-  return <section aria-label="stack-correction" ref={rootRef}><h3>Stack correction</h3><p role="status">Corrected stacks plus current commitments: {String(previewTotal)} of {String(game.chipSupply)} chips</p>{!conserves ? <p role="alert">Correction preview does not preserve total chip supply.</p> : null}{game.players.map((player) => <fieldset key={player.id}><legend>{player.name}</legend><p>Current stack: {String(player.stack)}</p><p>Current hand commitment: {String(commitments[player.id] ?? 0)}</p><label>Corrected stack <input name={`correction-${player.id}`} value={stacks[player.id] ?? String(player.stack)} inputMode="numeric" onInput={(event) => { const value = event.currentTarget.value; setStacks((current) => ({ ...current, [player.id]: value })); }} /></label></fieldset>)}<label>Correction reason <input name="correction-reason" maxLength={120} value={reason} onInput={(event) => { const value = event.currentTarget.value; setReason(value); }} /></label><button type="button" data-action="correct-stacks" disabled={!conserves || reason.trim() === ""} onClick={() => {
+  return <section aria-label="stack-correction" ref={rootRef}><h3>Stack correction</h3><p role="status">Corrected stacks plus current commitments: {String(previewTotal)} of {String(game.chipSupply)} chips</p>{!conserves ? <p role="alert">Correction preview does not preserve total chip supply.</p> : null}{game.players.map((player) => <fieldset key={player.id}><legend>{player.name}</legend><p>Current stack: {String(player.stack)}</p><p>Current hand commitment: {String(commitments[player.id] ?? 0)}</p><label>Corrected stack <input name={`correction-${player.id}`} value={stacks[player.id] ?? String(player.stack)} inputMode="numeric" onInput={(event) => { const value = event.currentTarget.value; setStacks((current) => ({ ...current, [player.id]: value })); }} /></label></fieldset>)}<label>Correction reason <input name="correction-reason" maxLength={120} value={reason} onInput={(event) => { const value = event.currentTarget.value; setReason(value); }} /></label><Button type="button" variant="primary" data-action="correct-stacks" disabled={!conserves || reason.trim() === ""} onClick={() => {
     run(() => session.correctStacks({ reason, stacks: Object.fromEntries(game.players.map((player) => [player.id, Number(stacks[player.id] ?? player.stack)])) }));
-  }}>Apply stack correction</button></section>;
+  }}>Apply stack correction</Button></section>;
 };
 
 const CurrentHand = ({ game, session, run }: { readonly game: Game; readonly session: GameSession; readonly run: (command: () => Promise<Awaited<ReturnType<GameSession["replace"]>>>) => void }) => {
@@ -167,7 +187,7 @@ const CurrentHand = ({ game, session, run }: { readonly game: Game; readonly ses
     if (playerId === undefined) return;
     run(() => session.act({ playerId, type, ...(targetStreetCommitment === undefined ? {} : { targetStreetCommitment }) }));
   };
-  return <section aria-label="current-hand"><h3>Hand #{String(hand.number)}</h3><p>Button: {playerName(game, hand.buttonPlayerId)}</p><p>Small blind: {playerName(game, hand.smallBlindPlayerId)}</p><p>Big blind: {playerName(game, hand.bigBlindPlayerId)}</p><p>Street: {hand.street}</p><p>Hand status: {hand.status}</p><p>Current actor: {hand.status === "betting" ? playerName(game, hand.actorPlayerId) : "none"}</p><p>Current bet: {String(hand.currentBet)}</p><p>Last full raise size: {String(hand.lastFullRaiseSize)}</p><ul aria-label="participants">{hand.participants.map((participant) => <ParticipantRow key={participant.playerId} game={game} participant={participant} />)}</ul><ActionLog game={game} hand={hand} />{hand.status === "dealPrompt" && hand.pendingTransition !== undefined ? <section aria-label="street-transition"><p>Ready to deal {hand.pendingTransition}</p><button type="button" data-action="confirm-street" onClick={() => { run(() => session.confirmStreet()); }}>Deal the {hand.pendingTransition}</button></section> : null}<ShowdownSettlement game={game} hand={hand} onSettle={(selections) => { run(() => session.settleShowdown(selections)); }} /><HandResult game={game} hand={hand} /><BettingControls game={game} onAction={playerAction} /></section>;
+  return <section aria-label="current-hand"><h3>Hand #{String(hand.number)}</h3><p>Button: {playerName(game, hand.buttonPlayerId)}</p><p>Small blind: {playerName(game, hand.smallBlindPlayerId)}</p><p>Big blind: {playerName(game, hand.bigBlindPlayerId)}</p><p>Street: {hand.street}</p><p>Hand status: {hand.status}</p><p>Current actor: {hand.status === "betting" ? playerName(game, hand.actorPlayerId) : "none"}</p><p>Current bet: {String(hand.currentBet)}</p><p>Last full raise size: {String(hand.lastFullRaiseSize)}</p><ul aria-label="participants">{hand.participants.map((participant) => <ParticipantRow key={participant.playerId} game={game} participant={participant} />)}</ul><ActionLog game={game} hand={hand} />{hand.status === "dealPrompt" && hand.pendingTransition !== undefined ? <section aria-label="street-transition"><p>Ready to deal {hand.pendingTransition}</p><Button type="button" variant="primary" data-action="confirm-street" onClick={() => { run(() => session.confirmStreet()); }}>Deal the {hand.pendingTransition}</Button></section> : null}<ShowdownSettlement game={game} hand={hand} onSettle={(selections) => { run(() => session.settleShowdown(selections)); }} /><HandResult game={game} hand={hand} /><BettingControls game={game} onAction={playerAction} /></section>;
 };
 
 const AuditLog = ({ game }: { readonly game: Game }) => <section aria-label="audit-log"><h3>Audit log</h3>{game.auditLog.length === 0 ? <p>Audit log: none</p> : <ol>{game.auditLog.map((entry) => <li key={entry.sequence}>#{String(entry.sequence)} {entry.type}{"reason" in entry ? ` - ${entry.reason}` : ""}</li>)}</ol>}</section>;
@@ -175,15 +195,19 @@ const AuditLog = ({ game }: { readonly game: Game }) => <section aria-label="aud
 const ActiveGameScreen = ({ state, session, setState }: { readonly state: State; readonly session: GameSession; readonly setState: React.Dispatch<React.SetStateAction<State>> }) => {
   const [undoConfirmed, setUndoConfirmed] = useState(false);
   const game = session.current();
-  const run = (command: () => Promise<Awaited<ReturnType<GameSession["replace"]>>>): void => {
-    void command().then((result) => { setState((current) => ({ ...current, commandErrors: result.ok ? [] : [saveErrorMessage(result)] })); });
-  };
+  const run = (command: () => Promise<Awaited<ReturnType<GameSession["replace"]>>>): void => { void command().then((result) => { setState((current) => ({ ...current, commandErrors: result.ok ? [] : [saveErrorMessage(result)] })); }); };
   if (game === undefined) return null;
   const dealer = game.players.find((p) => p.id === game.dealerPlayerId)?.name ?? game.dealerPlayerId;
   const canStart = game.status === "active" && (game.currentHand === undefined || game.currentHand.status === "settled");
   const undoDescription = session.lastUndoDescription() ?? "last reversible action";
   const winners = game.players.filter(({ stack }) => stack > 0);
-  return <>{state.recovered ? <p role="status">Recovered saved game.</p> : null}<section aria-label="active-game"><h2>Active game</h2><div role="alert">{state.commandErrors.map((error) => <p key={error}>{error}</p>)}</div><p>Status: {game.status}</p><p>Dealer: {dealer}</p><p>Blinds: {String(game.settings.smallBlind)}/{String(game.settings.bigBlind)}</p>{game.status === "completed" ? <section aria-label="completed-game"><h2>Game completed</h2><p>Final winner: {winners.length === 1 ? winners[0]?.name ?? "unknown" : "undetermined"}</p></section> : null}<CurrentHand game={game} session={session} run={run} /><ul>{game.players.map((p) => <li key={p.id}>{String(p.seat + 1)}. {p.name} ({p.avatar}) - stack {String(p.stack)} - {p.status}</li>)}</ul><section aria-label="undo-controls"><h3>Undo</h3><p>Last reversible action: {undoDescription}</p><label><input type="checkbox" name="confirmUndo" checked={undoConfirmed} onChange={(event) => { setUndoConfirmed(event.currentTarget.checked); }} /> Confirm undo</label><button type="button" data-action="undo" disabled={session.undoDepth() === 0 || !undoConfirmed} onClick={() => { setUndoConfirmed(false); run(() => session.undo()); }}>Undo last action</button></section><StackCorrection game={game} session={session} run={run} /><AuditLog game={game} />{canStart ? <button type="button" data-action="start-hand" onClick={() => { run(() => session.startHand({ handId: `hand-${Date.now().toString()}` })); }}>Start hand</button> : null}<button type="button" data-action="new-game" onClick={() => { setState((current) => ({ ...current, screen: "setup", replacing: session.current() !== undefined, recovered: false, errors: [], commandErrors: [] })); }}>New game</button></section></>;
+  return <main className="app-shell">{state.recovered ? <Alert tone="success">Recovered saved game.</Alert> : null}<Card aria-label="active-game" title="Active game" eyebrow={<span className="badge-row"><Badge tone={game.status === "completed" ? "success" : "info"}>{game.status}</Badge><Badge tone="neutral">Blinds: {String(game.settings.smallBlind)}/{String(game.settings.bigBlind)}</Badge></span>} actions={canStart ? <Button type="button" variant="primary" data-action="start-hand" onClick={() => { run(() => session.startHand({ handId: `hand-${Date.now().toString()}` })); }}>Start hand</Button> : undefined}>
+    {state.commandErrors.length > 0 ? <Alert tone="danger">{state.commandErrors.map((error) => <p key={error}>{error}</p>)}</Alert> : <div role="alert" className="sr-only" />}
+    <div className="status-grid"><p>Status: {game.status}</p><p>Dealer: {dealer}</p><p>Blinds: {String(game.settings.smallBlind)}/{String(game.settings.bigBlind)}</p></div>
+    {game.status === "completed" ? <section aria-label="completed-game" className="panel"><h2>Game completed</h2><p>Final winner: {winners.length === 1 ? winners[0]?.name ?? "unknown" : "undetermined"}</p></section> : null}
+    <div className="layout-grid"><Card title="Current hand" className="card--accent"><CurrentHand game={game} session={session} run={run} /></Card><Card title="Players"><ul className="player-list">{game.players.map((p) => <li key={p.id}>{String(p.seat + 1)}. {p.name} ({p.avatar}) - stack {String(p.stack)} - {p.status} <Badge tone={p.status === "active" ? "success" : "danger"}>{p.status}</Badge></li>)}</ul></Card><Card aria-label="undo-controls" title="Undo"><p>Last reversible action: {undoDescription}</p><label className="checkbox-line"><input type="checkbox" name="confirmUndo" checked={undoConfirmed} onChange={(event) => { setUndoConfirmed(event.currentTarget.checked); }} /> Confirm undo</label><ConfirmDialog title="Undo last action?" description={`This will reverse ${undoDescription}. Confirm at the table before applying it.`} trigger={<Button type="button" variant="danger" data-action="undo" disabled={session.undoDepth() === 0 || !undoConfirmed} onClick={() => { setUndoConfirmed(false); run(() => session.undo()); }}>Undo last action</Button>}><Dialog.Close asChild><Button type="button" variant="danger" onClick={() => { setUndoConfirmed(false); run(() => session.undo()); }}>Undo last action</Button></Dialog.Close></ConfirmDialog></Card><Card title="Stack correction"><StackCorrection game={game} session={session} run={run} /></Card><Card title="Audit"><AuditLog game={game} /></Card></div>
+    <Button type="button" variant="ghost" data-action="new-game" onClick={() => { setState((current) => ({ ...current, screen: "setup", replacing: session.current() !== undefined, recovered: false, errors: [], commandErrors: [] })); }}>New game</Button>
+  </Card></main>;
 };
 
 const readSetupForm = (root: HTMLElement, current: SetupForm): SetupForm => ({
@@ -203,33 +227,11 @@ const readSetupForm = (root: HTMLElement, current: SetupForm): SetupForm => ({
 const SetupScreen = ({ state, session, setState }: { readonly state: State; readonly session: GameSession; readonly setState: React.Dispatch<React.SetStateAction<State>> }) => {
   const rootRef = useRef<HTMLElement>(null);
   const preview = useMemo(() => previewSetup(state.form), [state.form]);
-  useEffect(() => {
-    const root = rootRef.current;
-    if (root === null) return;
-    const listener = (): void => { flushSync(() => { setState((current) => ({ ...current, form: readSetupForm(root, current.form), errors: [], replacementRequired: false })); }); };
-    root.addEventListener("input", listener);
-    root.addEventListener("change", listener);
-    return () => { root.removeEventListener("input", listener); root.removeEventListener("change", listener); };
-  }, [setState]);
-  const updatePlayer = (index: number, patch: Partial<SetupForm["players"][number]>): void => {
-    setState((current) => ({ ...current, errors: [], replacementRequired: false, form: { ...current.form, players: current.form.players.map((player, candidate) => candidate === index ? { ...player, ...patch } : player) } }));
-  };
-  const create = (): void => {
-    const form = rootRef.current === null ? state.form : readSetupForm(rootRef.current, state.form);
-    if (state.replacing && !document.querySelector<HTMLInputElement>("[name='confirmReplace']")?.checked) { setState((current) => ({ ...current, replacementRequired: true })); return; }
-    const result = createGame(toCreateGameInput(form, `game-${Date.now().toString()}`));
-    if (!result.ok) { setState((current) => ({ ...current, form, errors: result.errors })); return; }
-    void session.replace(result.value).then((saved) => {
-      if (!saved.ok) { setState((current) => ({ ...current, errors: [{ code: "setup.persistence", message: saveErrorMessage(saved) }] })); return; }
-      setState((current) => ({ ...current, screen: "active", recovered: false, replacing: false, errors: [], commandErrors: [], replacementRequired: false }));
-    });
-  };
+  useEffect(() => { const root = rootRef.current; if (root === null) return; const listener = (): void => { flushSync(() => { setState((current) => ({ ...current, form: readSetupForm(root, current.form), errors: [], replacementRequired: false })); }); }; root.addEventListener("input", listener); root.addEventListener("change", listener); return () => { root.removeEventListener("input", listener); root.removeEventListener("change", listener); }; }, [setState]);
+  const updatePlayer = (index: number, patch: Partial<SetupForm["players"][number]>): void => { setState((current) => ({ ...current, errors: [], replacementRequired: false, form: { ...current.form, players: current.form.players.map((player, candidate) => candidate === index ? { ...player, ...patch } : player) } })); };
+  const create = (): void => { const form = rootRef.current === null ? state.form : readSetupForm(rootRef.current, state.form); if (state.replacing && !document.querySelector<HTMLInputElement>("[name='confirmReplace']")?.checked) { setState((current) => ({ ...current, replacementRequired: true })); return; } const result = createGame(toCreateGameInput(form, `game-${Date.now().toString()}`)); if (!result.ok) { setState((current) => ({ ...current, form, errors: result.errors })); return; } void session.replace(result.value).then((saved) => { if (!saved.ok) { setState((current) => ({ ...current, errors: [{ code: "setup.persistence", message: saveErrorMessage(saved) }] })); return; } setState((current) => ({ ...current, screen: "active", recovered: false, replacing: false, errors: [], commandErrors: [], replacementRequired: false })); }); };
   const issues = [...state.errors.map(issueLabel), ...preview.warnings.map(issueLabel), ...(state.replacementRequired ? ["Confirm replacement before creating a new game."] : [])];
-  return <section aria-label="setup" ref={rootRef}><h1>Chips operator</h1><div role="alert">{issues.map((issue) => <p key={issue}>{issue}</p>)}</div>{state.form.players.map((player, index) => {
-    const seat = String(index + 1);
-    const id = `player-${seat}`;
-    return <fieldset key={id}><legend>Player {seat}</legend><input name={`${id}-name`} defaultValue={player.name} aria-label={`Player ${seat} name`} onInput={(event) => { updatePlayer(index, { name: event.currentTarget.value }); }} /><select name={`${id}-avatar`} defaultValue={player.avatar}>{AVATARS.map((avatar) => <option value={avatar} key={avatar}>{avatar}</option>)}</select><input name={`${id}-stack`} defaultValue={player.stack} inputMode="numeric" aria-label={`Player ${seat} stack`} onInput={(event) => { updatePlayer(index, { stack: event.currentTarget.value }); }} /></fieldset>;
-  })}<label>Small blind <input name="smallBlind" defaultValue={state.form.smallBlind} /></label><label>Big blind <input name="bigBlind" defaultValue={state.form.bigBlind} /></label><label>Initial dealer <select name="dealer" defaultValue={state.form.dealerPlayerId}>{state.form.players.map((_player, index) => <option value={`player-${String(index + 1)}`} key={index}>Player {String(index + 1)}</option>)}</select></label><p>Total chip supply: {String(preview.totalChipSupply)}</p><button type="button" data-action="add-player" disabled={state.form.players.length >= 8} onClick={() => { setState((current) => { const next = current.form.players.length + 1; return next > 8 ? current : { ...current, form: { ...current.form, players: [...current.form.players, { name: `Player ${String(next)}`, avatar: AVATARS[(next - 1) % AVATARS.length] ?? AVATARS[0], stack: "1000" }] } }; }); }}>Add player</button><button type="button" data-action="remove-player" disabled={state.form.players.length <= 2} onClick={() => { setState((current) => current.form.players.length <= 2 ? current : { ...current, form: { ...current.form, players: current.form.players.slice(0, -1), dealerPlayerId: current.form.dealerPlayerId === `player-${String(current.form.players.length)}` ? "player-1" : current.form.dealerPlayerId } }); }}>Remove player</button>{state.replacing ? <label><input type="checkbox" name="confirmReplace" /> Confirm replacing the saved game</label> : null}<button type="button" data-action="create" onClick={create}>Create game</button></section>;
+  return <main className="app-shell"><section aria-label="setup" ref={rootRef} className="setup-shell"><header className="hero"><p className="eyebrow">Table PWA</p><h1>Chips operator</h1><p>Fast stack setup, visible blinds, and deliberate destructive actions.</p></header>{issues.length > 0 ? <Alert tone="warning">{issues.map((issue) => <p key={issue}>{issue}</p>)}</Alert> : <div role="alert" className="sr-only" />}<Card title="Players" eyebrow={`${String(state.form.players.length)} seats`}>{state.form.players.map((player, index) => { const seat = String(index + 1); const id = `player-${seat}`; return <fieldset className="player-fieldset" key={id}><legend>Player {seat}</legend><Field label="Name"><TextInput name={`${id}-name`} defaultValue={player.name} aria-label={`Player ${seat} name`} onInput={(event) => { updatePlayer(index, { name: event.currentTarget.value }); }} /></Field><Field label="Avatar"><Select name={`${id}-avatar`} defaultValue={player.avatar}>{AVATARS.map((avatar) => <option value={avatar} key={avatar}>{avatar}</option>)}</Select></Field><Field label="Stack"><TextInput name={`${id}-stack`} defaultValue={player.stack} inputMode="numeric" aria-label={`Player ${seat} stack`} onInput={(event) => { updatePlayer(index, { stack: event.currentTarget.value }); }} /></Field></fieldset>; })}<div className="button-row"><Button type="button" data-action="add-player" disabled={state.form.players.length >= 8} onClick={() => { setState((current) => { const next = current.form.players.length + 1; return next > 8 ? current : { ...current, form: { ...current.form, players: [...current.form.players, { name: `Player ${String(next)}`, avatar: AVATARS[(next - 1) % AVATARS.length] ?? AVATARS[0], stack: "1000" }] } }; }); }}>Add player</Button><Button type="button" variant="ghost" data-action="remove-player" disabled={state.form.players.length <= 2} onClick={() => { setState((current) => current.form.players.length <= 2 ? current : { ...current, form: { ...current.form, players: current.form.players.slice(0, -1), dealerPlayerId: current.form.dealerPlayerId === `player-${String(current.form.players.length)}` ? "player-1" : current.form.dealerPlayerId } }); }}>Remove player</Button></div></Card><Card title="Game settings"><div className="settings-grid"><Field label="Small blind"><TextInput name="smallBlind" defaultValue={state.form.smallBlind} inputMode="numeric" /></Field><Field label="Big blind"><TextInput name="bigBlind" defaultValue={state.form.bigBlind} inputMode="numeric" /></Field><Field label="Initial dealer"><Select name="dealer" defaultValue={state.form.dealerPlayerId}>{state.form.players.map((_player, index) => <option value={`player-${String(index + 1)}`} key={index}>Player {String(index + 1)}</option>)}</Select></Field></div><p className="metric">Total chip supply: {String(preview.totalChipSupply)}</p>{state.replacing ? <label className="checkbox-line"><input type="checkbox" name="confirmReplace" /> Confirm replacing the saved game</label> : null}<ConfirmDialog title="Create this game?" description={state.replacing ? "This can replace the saved game after the replacement checkbox is checked." : "Create the game and persist it locally for this table."} trigger={<Button type="button" variant="primary" data-action="create" onClick={create}>Create game</Button>}><Button type="button" variant="primary" onClick={create}>Create game</Button></ConfirmDialog></Card></section></main>;
 };
 
 const App = ({ session }: { readonly session: GameSession }) => {
