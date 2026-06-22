@@ -13,9 +13,11 @@ describe("static app shell", () => {
     expect(index).toContain('<meta name="theme-color" content="#0f172a" />');
     expect(index).toContain("Content-Security-Policy");
     expect(JSON.parse(manifest) as unknown).toMatchObject({ name: "Chips", start_url: ".", scope: ".", display: "standalone", icons: [{ src: "icon.svg", purpose: "any maskable" }] });
-    expect(serviceWorker).toContain("chips-static-v2");
+    expect(serviceWorker).toContain("chips-static-v3");
     expect(serviceWorker).toContain("self.registration.scope");
-    expect(serviceWorker).toContain("self.addEventListener(\"fetch\"");
+    expect(serviceWorker).toContain('event.request.mode === "navigate"');
+    expect(serviceWorker).toContain("fetch(event.request)");
+    expect(serviceWorker).not.toContain("cache.put(event.request");
     expect(main).toContain("navigator.serviceWorker.register(`${base}sw.js`, { scope: base })");
   });
 });
