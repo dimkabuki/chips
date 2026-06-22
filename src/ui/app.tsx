@@ -64,9 +64,21 @@ const ConfirmDialog = ({ title, description, trigger, children }: { readonly tit
   </Dialog.Root>
 );
 
-const ActionLog = ({ game, hand }: { readonly game: Game; readonly hand: Hand }) => hand.actions.length === 0
-  ? <p>Action log: none</p>
-  : <ol aria-label="action-log">{hand.actions.map((action) => <li key={action.sequence}>#{String(action.sequence)} {playerName(game, action.playerId)} {action.type} target {String(action.targetStreetCommitment)} cost {String(action.chipsAdded)} stack {String(action.resultingStack)}</li>)}</ol>;
+const ActionLog = ({ game, hand }: { readonly game: Game; readonly hand: Hand }) => (
+  <details className="action-log">
+    <summary>Hand action log ({String(hand.actions.length)})</summary>
+    {hand.actions.length === 0
+      ? <p>Action log: none</p>
+      : <ol aria-label="action-log">{hand.actions.map((action) => <li key={action.sequence}>#{String(action.sequence)} {playerName(game, action.playerId)} {action.type} target {String(action.targetStreetCommitment)} cost {String(action.chipsAdded)} stack {String(action.resultingStack)}</li>)}</ol>}
+  </details>
+);
+
+const PotSummary = ({ hand }: { readonly hand: Hand }) => {
+  const currentStagePot = hand.participants.reduce((sum, participant) => sum + participant.streetCommitment, 0);
+  const totalCommitted = hand.participants.reduce((sum, participant) => sum + participant.handCommitment, 0);
+  const tablePot = totalCommitted - currentStagePot;
+  return <table className="pot-table" aria-label="pot-summary"><caption>Pot summary</caption><tbody><tr><th scope="row">Table pot</th><td>{String(tablePot)}</td></tr><tr><th scope="row">Current stage</th><td>{String(currentStagePot)}</td></tr><tr><th scope="row">Total pot</th><td>{String(totalCommitted)}</td></tr></tbody></table>;
+};
 
 const BettingControls = ({ game, onAction }: { readonly game: Game; readonly onAction: (type: PlayerActionType, target?: number) => void }) => {
   const legal = getLegalActions(game);
@@ -87,15 +99,15 @@ const BettingControls = ({ game, onAction }: { readonly game: Game; readonly onA
     return () => { root.removeEventListener("input", listener); };
   }, []);
   if (legal === undefined || hand === undefined) return null;
-  return <section aria-label="betting-actions" ref={rootRef}><h3>Actions for {playerName(game, legal.playerId)}</h3>{legal.actions.map((action) => {
+  return <section aria-label="betting-actions" className="section-panel betting-actions" ref={rootRef}><h3>Actions for {playerName(game, legal.playerId)}</h3><div className="button-row">{legal.actions.map((action) => {
     if (action.type === "fold" || action.type === "check") return <Button key={action.type} type="button" variant={action.type === "fold" ? "danger" : "secondary"} data-action={action.type} onClick={(event) => { onAction(event.currentTarget.dataset.action as PlayerActionType); }}>{action.type === "fold" ? "Fold" : "Check"}</Button>;
     if (action.type === "call") return <Button key="call" type="button" variant="primary" data-action="call" onClick={(event) => { onAction(event.currentTarget.dataset.action as PlayerActionType); }}>Call {String(action.targetStreetCommitment)} (+{String(action.chipsAdded)})</Button>;
     if (action.type === "allIn") return <Button key="allIn" type="button" variant="danger" data-action="allIn" onClick={(event) => { onAction(event.currentTarget.dataset.action as PlayerActionType); }}>All-in {String(action.targetStreetCommitment)} (+{String(action.chipsAdded)})</Button>;
     const value = targets[action.type] ?? String(action.minTarget);
     const numeric = Number(value);
     const label = action.type === "bet" ? "Bet" : "Raise";
-    return <React.Fragment key={action.type}><Field label={`${label} target`}><TextInput name={`${action.type}-target`} defaultValue={value} inputMode="numeric" data-amount-type={action.type} /></Field><p data-preview={action.type}>{label} target {String(numeric)}, cost {String(numeric - (actor?.streetCommitment ?? 0))}</p><Button type="button" variant="primary" data-action={action.type} onClick={(event) => { onAction(event.currentTarget.dataset.action as PlayerActionType, numeric); }}>{label}</Button></React.Fragment>;
-  })}</section>;
+    return <React.Fragment key={action.type}><Field label="Target" className="betting-actions__target"><TextInput name={`${action.type}-target`} value={value} inputMode="numeric" data-amount-type={action.type} onInput={(event) => { const next = event.currentTarget.value; setTargets((current) => ({ ...current, [action.type]: next })); }} /></Field><p className="betting-actions__preview" data-preview={action.type}>Cost: {String(numeric - (actor?.streetCommitment ?? 0))}</p><Button type="button" variant="primary" data-action={action.type} onClick={(event) => { const target = Number(rootRef.current?.querySelector<HTMLInputElement>(`[name='${action.type}-target']`)?.value ?? numeric); onAction(event.currentTarget.dataset.action as PlayerActionType, target); }}>{label}</Button></React.Fragment>;
+  })}</div></section>;
 };
 
 type ShowdownDraft = Record<number, { readonly winnerPlayerIds: readonly string[]; readonly allocations: Record<string, string> }>;
@@ -185,7 +197,7 @@ const CurrentHand = ({ game, session, run }: { readonly game: Game; readonly ses
     run(() => session.act({ playerId, type, ...(targetStreetCommitment === undefined ? {} : { targetStreetCommitment }) }));
   };
   const actorName = hand.status === "betting" ? playerName(game, hand.actorPlayerId) : undefined;
-  return <section aria-label="current-hand"><HandProgress hand={hand} actorName={actorName} /><div className="hand-summary"><p>Button: {playerName(game, hand.buttonPlayerId)}</p><p>Blinds: {playerName(game, hand.smallBlindPlayerId)} / {playerName(game, hand.bigBlindPlayerId)}</p><p>Current bet: {String(hand.currentBet)}</p></div><PlayerStatusList players={game.players} participants={hand.participants} actorPlayerId={hand.status === "betting" ? hand.actorPlayerId : undefined} /><ActionLog game={game} hand={hand} />{hand.status === "dealPrompt" && hand.pendingTransition !== undefined ? <section aria-label="street-transition"><p>Ready to deal {hand.pendingTransition}</p><Button type="button" variant="primary" data-action="confirm-street" onClick={() => { run(() => session.confirmStreet()); }}>Deal the {hand.pendingTransition}</Button></section> : null}<ShowdownSettlement game={game} hand={hand} onSettle={(selections) => { run(() => session.settleShowdown(selections)); }} /><HandResult game={game} hand={hand} /><BettingControls game={game} onAction={playerAction} /></section>;
+  return <section aria-label="current-hand"><HandProgress hand={hand} actorName={actorName} /><PotSummary hand={hand} /><div className="hand-summary"><p>Button: {playerName(game, hand.buttonPlayerId)}</p><p>Blinds: {playerName(game, hand.smallBlindPlayerId)} / {playerName(game, hand.bigBlindPlayerId)}</p><p>Current bet: {String(hand.currentBet)}</p></div><PlayerStatusList players={game.players} participants={hand.participants} actorPlayerId={hand.status === "betting" ? hand.actorPlayerId : undefined} /><ActionLog game={game} hand={hand} />{hand.status === "dealPrompt" && hand.pendingTransition !== undefined ? <section aria-label="street-transition"><p>Ready to deal {hand.pendingTransition}</p><Button type="button" variant="primary" data-action="confirm-street" onClick={() => { run(() => session.confirmStreet()); }}>Deal the {hand.pendingTransition}</Button></section> : null}<ShowdownSettlement game={game} hand={hand} onSettle={(selections) => { run(() => session.settleShowdown(selections)); }} /><HandResult game={game} hand={hand} /><BettingControls game={game} onAction={playerAction} /></section>;
 };
 
 const AuditLog = ({ game }: { readonly game: Game }) => <section aria-label="audit-log"><h3>Audit log</h3>{game.auditLog.length === 0 ? <p>Audit log: none</p> : <ol>{game.auditLog.map((entry) => <li key={entry.sequence}>#{String(entry.sequence)} {entry.type}{"reason" in entry ? ` - ${entry.reason}` : ""}</li>)}</ol>}</section>;

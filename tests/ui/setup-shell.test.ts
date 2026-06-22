@@ -167,6 +167,9 @@ describe("operator UI shell", () => {
     expect(text()).toContain("Hand #1");
     expect(text()).toContain("Blinds: Ada / Linus");
     expect(document.querySelector("[aria-label='hand-progress']")).not.toBeNull();
+    expect(document.querySelector(".action-log")?.hasAttribute("open")).toBe(false);
+    expect(text()).toContain("Table pot");
+    expect(text()).toContain("Current stage");
     expect(text()).toContain("Pre-flop");
     expect(text()).toContain("Actor: Ada");
     expect(text()).toContain("AdaStack: 995Committed: 5Actor");
@@ -190,7 +193,20 @@ describe("operator UI shell", () => {
     expect(text()).toContain("Call 10 (+5)");
     expect(text()).toContain("All-in 1000 (+995)");
     setAmount("raise", "25");
-    expect(text()).toContain("Raise target 25, cost 20");
+    expect(text()).not.toContain("Raise target");
+    expect(text()).toContain("Cost: 20");
+  });
+
+
+  it("submits the typed raise target instead of the stale minimum target", async () => {
+    const repo = new MemoryGameRepository(serializeEnvelope(createEnvelope(fixtureGame(), 1)));
+    const { session } = await setup(repo);
+    await click("Start hand");
+    setAmount("raise", "500");
+    expect(text()).toContain("Cost: 495");
+    await clickAction("raise");
+    expect(session.current()?.currentHand?.actions.at(-1)?.targetStreetCommitment).toBe(500);
+    expect(session.current()?.currentHand?.currentBet).toBe(500);
   });
 
   it("submits fold, check, call, bet, raise, and all-in through GameSession and persists each", async () => {
