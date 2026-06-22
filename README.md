@@ -16,6 +16,12 @@ v1 development is complete for the single-device static application:
 
 The UI intentionally delegates poker legality, settlement, persistence, undo, and correction semantics to domain/application seams. Browser storage remains isolated to the IndexedDB adapter.
 
+## GitHub Pages deployment
+
+Use `Settings -> Pages -> Build and deployment -> Source -> GitHub Actions`. Do not use the suggested Jekyll workflow for this project; it publishes raw source and leaves the browser requesting `/src/main.ts`.
+
+The checked-in workflow builds the Vite app with the repository name as the base path, validates the generated static shell, uploads `dist`, and deploys that artifact to Pages. A healthy deployed page source references `/chips/assets/...`, not `/src/main.ts`.
+
 ## Release checklist
 
 Before publishing a release:
