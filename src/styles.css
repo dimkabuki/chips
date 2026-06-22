@@ -141,3 +141,18 @@ legend, .field__label { color: var(--muted); font-size: 0.85rem; font-weight: 70
   0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--primary), transparent 45%); }
   50% { box-shadow: 0 0 0 0.35rem color-mix(in srgb, var(--primary), transparent 100%); }
 }
+
+.section-panel, .action-log, .pot-table { margin-block: 0.85rem; }
+.section-panel, .action-log { border: 1px solid var(--border); border-radius: 0.85rem; padding: 0.85rem; background: color-mix(in srgb, var(--surface), var(--surface-strong) 25%); }
+.action-log summary { cursor: pointer; font-weight: 800; color: var(--muted); }
+.action-log ol { margin-block: 0.75rem 0; }
+.pot-table { width: 100%; border-collapse: collapse; overflow: hidden; border: 1px solid var(--border); border-radius: 0.85rem; background: var(--surface); }
+.pot-table caption { padding: 0.55rem 0.75rem; color: var(--muted); font-size: 0.85rem; font-weight: 800; text-align: left; }
+.pot-table th, .pot-table td { padding: 0.65rem 0.75rem; border-top: 1px solid var(--border); text-align: left; }
+.pot-table td { font-weight: 900; text-align: right; }
+.betting-actions .button-row { align-items: end; margin-top: 0.5rem; }
+.betting-actions__target { flex: 1 1 14rem; }
+.betting-actions__preview { align-self: center; margin: 0; color: var(--muted); font-weight: 800; }
+@media (prefers-reduced-motion: no-preference) {
+  .hand-progress__street--active .hand-progress__dot { animation: status-pulse 1.4s ease-in-out infinite; }
+}
