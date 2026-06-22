@@ -1,7 +1,7 @@
-const CACHE_NAME = "chips-static-v2";
+const CACHE_NAME = "chips-static-v3";
 const scopeUrl = new URL(self.registration.scope);
 const scoped = (path) => new URL(path, scopeUrl).toString();
-const STATIC_ASSETS = [scoped("./"), scoped("./index.html"), scoped("./manifest.webmanifest")];
+const STATIC_ASSETS = [scoped("./index.html"), scoped("./manifest.webmanifest"), scoped("./icon.svg")];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(STATIC_ASSETS)));
@@ -13,11 +13,19 @@ self.addEventListener("activate", (event) => {
   self.clients.claim();
 });
 
+const cacheFirst = (request) => caches.match(request).then((cached) => cached ?? fetch(request).then((response) => {
+  if (response.ok) {
+    const copy = response.clone();
+    caches.open(CACHE_NAME).then((cache) => { void cache.put(request, copy); });
+  }
+  return response;
+}));
+
 self.addEventListener("fetch", (event) => {
   if (event.request.method !== "GET") return;
-  event.respondWith(caches.match(event.request).then((cached) => cached ?? fetch(event.request).then((response) => {
-    const copy = response.clone();
-    caches.open(CACHE_NAME).then((cache) => { void cache.put(event.request, copy); });
-    return response;
-  }).catch(() => caches.match(scoped("./index.html")))));
+  if (event.request.mode === "navigate") {
+    event.respondWith(fetch(event.request).catch(() => caches.match(scoped("./index.html"))));
+    return;
+  }
+  event.respondWith(cacheFirst(event.request).catch(() => caches.match(event.request)));
 });
