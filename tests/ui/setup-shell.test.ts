@@ -165,12 +165,16 @@ describe("operator UI shell", () => {
     expect(session.current()?.currentHand?.number).toBe(1);
     expect(repo.rawValue()).toBeDefined();
     expect(text()).toContain("Hand #1");
-    expect(text()).toContain("Small blind: Ada");
-    expect(text()).toContain("Big blind: Linus");
+    expect(text()).toContain("Blinds: Ada / Linus");
+    expect(document.querySelector("[aria-label='hand-progress']")).not.toBeNull();
+    expect(text()).toContain("Pre-flop");
+    expect(text()).toContain("Actor: Ada");
+    expect(text()).toContain("AdaStack: 995Committed: 5Actor");
+    expect(text()).not.toContain("Last full raise size:");
     await setup(repo);
     expect(text()).toContain("Recovered saved game.");
     expect(text()).toContain("Hand #1");
-    expect(text()).toContain("Current actor: Ada");
+    expect(text()).toContain("Actor: Ada");
   });
 
   it("renders betting controls from domain legal actions and previews target plus incremental cost", async () => {
@@ -225,7 +229,7 @@ describe("operator UI shell", () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(text()).toContain("That action is not legal.");
     expect(session.current()).toBe(before);
-    expect(text()).toContain("Current actor: Ada");
+    expect(text()).toContain("Actor: Ada");
   });
 
   it("undoes the last undoable command through the session seam and persists the restored game", async () => {
@@ -258,8 +262,8 @@ describe("operator UI shell", () => {
     expect(session.current()?.players.map(({ stack }) => stack)).toEqual([900, 1100]);
     expect(repo.rawValue()).toContain('"type":"stackCorrection"');
     expect(repo.rawValue()).toContain('"reason":"chip count"');
-    expect(text()).toContain("Ada (red) - stack 900");
-    expect(text()).toContain("Linus (blue) - stack 1100");
+    expect(text()).toContain("AdaStack: 900Committed: 0Live");
+    expect(text()).toContain("LinusStack: 1100Committed: 0Live");
     expect(text()).toContain("#1 stackCorrection - chip count");
   });
 
@@ -272,7 +276,7 @@ describe("operator UI shell", () => {
     expect(text()).toContain("Correction preview does not preserve total chip supply.");
     expect(required(document.querySelector<HTMLButtonElement>("[data-action='correct-stacks']")).disabled).toBe(true);
     expect(session.current()).toBe(before);
-    expect(text()).toContain("Ada (red) - stack 1000");
+    expect(text()).toContain("AdaStack: 1000Committed: 0Live");
   });
 
   it("confirms pending street prompts through the session seam and persists advancement", async () => {
@@ -300,7 +304,7 @@ describe("operator UI shell", () => {
     const checked = act(called.value, { playerId: "player-2", type: "check" });
     if (!checked.ok) throw new Error("bad check");
     await setup(new MemoryGameRepository(serializeEnvelope(createEnvelope(checked.value, 1))));
-    expect(text()).toContain("Current actor: none");
+    expect(text()).toContain("Ready: Flop");
     expect(document.querySelector("[aria-label='betting-actions']")).toBeNull();
   });
   it("renders showdown derived pots and eligible players only", async () => {

@@ -109,3 +109,35 @@ legend, .field__label { color: var(--muted); font-size: 0.85rem; font-weight: 70
   .dialog__content { inset: 15vh 1rem auto; }
   .dialog__actions { display: flex; justify-content: end; }
 }
+
+.hand-summary { display: grid; gap: 0.5rem; grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr)); }
+.hand-summary p { margin: 0; }
+.hand-progress { display: grid; gap: 0.85rem; }
+.hand-progress__meta { display: flex; flex-wrap: wrap; gap: 0.5rem 1rem; align-items: baseline; justify-content: space-between; }
+.hand-progress__status { margin: 0; font-size: 1.15rem; font-weight: 900; }
+.hand-progress__streets { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.4rem; padding: 0; margin: 0; list-style: none; }
+.hand-progress__street { display: grid; gap: 0.35rem; justify-items: center; color: var(--muted); font-size: 0.78rem; font-weight: 800; text-align: center; }
+.hand-progress__street--active { color: var(--primary); }
+.hand-progress__street--complete { color: var(--success); }
+.hand-progress__dot { width: 0.7rem; height: 0.7rem; border: 2px solid currentColor; border-radius: 999px; background: var(--surface); }
+.hand-progress__street--active .hand-progress__dot, .hand-progress__street--complete .hand-progress__dot { background: currentColor; }
+.card-slots { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 0.4rem; }
+.card-slot { min-height: clamp(3rem, 18vw, 5rem); border: 1px dashed var(--border); border-radius: 0.55rem; background: linear-gradient(135deg, color-mix(in srgb, var(--surface-strong), transparent 20%), var(--surface)); }
+.card-slot--ready { border-style: solid; border-color: color-mix(in srgb, var(--primary), var(--border) 45%); }
+.player-status-list { display: grid; gap: 0.45rem; padding: 0; margin: 0; list-style: none; }
+.player-status-list__item { display: grid; grid-template-columns: auto auto minmax(0, 1fr) auto; gap: 0.55rem; align-items: center; border: 1px solid var(--border); border-radius: 0.75rem; padding: 0.55rem; background: color-mix(in srgb, var(--surface), var(--surface-strong) 35%); }
+.player-status-list__seat { display: inline-grid; place-items: center; width: 1.5rem; height: 1.5rem; border-radius: 999px; background: var(--surface-strong); color: var(--muted); font-size: 0.75rem; font-weight: 900; }
+.player-status-list__main { display: grid; min-width: 0; gap: 0.1rem; }
+.player-status-list__meta { color: var(--muted); font-size: 0.8rem; }
+.player-status-list__state { font-size: 0.78rem; font-weight: 900; text-transform: uppercase; }
+.status-dot { width: 0.7rem; height: 0.7rem; border-radius: 999px; background: var(--success); }
+.status-dot--folded, .status-dot--busted { background: var(--danger); }
+.status-dot--allin { background: var(--warning); }
+.status-dot--actor { background: var(--primary); }
+@media (prefers-reduced-motion: no-preference) {
+  .status-dot--pulse { animation: status-pulse 1.4s ease-in-out infinite; }
+}
+@keyframes status-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--primary), transparent 45%); }
+  50% { box-shadow: 0 0 0 0.35rem color-mix(in srgb, var(--primary), transparent 100%); }
+}
